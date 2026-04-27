@@ -173,147 +173,46 @@ const PASS_INCLUDES = {
   "Charter Pass":        [], // empty — Charter holders use customWorkshops on the participant record
 };
 
-const OP_PERFORMERS = {
-  "Akshaya Sundar":          { block: "21:45", solo: true  },
-  "Aniqa Nawar":             { block: "21:00", solo: true  },
-  "Divina Anil":             { block: "21:45", solo: true  },
-  "Dounia Chaoui":           { block: "21:00", solo: false, with: "Elsa" },
-  "Kiran Maya Priya Barua":  { block: "21:00", solo: true  },
-  "Nikta Jaamei":            { block: "21:00", solo: true  },
-  "Shilpa Joy":              { block: "21:00", solo: true  },
-  "Silva Basu":              { block: "21:45", solo: true  },
-};
+// OP_PERFORMERS, PASS_ADDONS, GALA_TICKETS, PARTICIPANTS — all moved to
+// Supabase. The JS receives only ONE matched record per lookup, never the
+// full registry. See supabase/001_boarding_pass.sql for the schema.
 
 /* ============================================================
-   2. PARTICIPANT REGISTRY
+   2. SUPABASE CONFIG  — participant registry lives in Supabase
+   (gidf-claims project, bp_* tables). The JS receives only ONE matched
+   record per lookup; it never holds the full registry.
    ============================================================ */
-const PARTICIPANTS = [
-  // Discovery Pass
-  { id: 1401, name: "Ardania Putri",          email: "dania.kputri@gmail.com",     phone: "+31610290564", pass: "Discovery Pass" },
-  { id: 1093, name: "Anne Adriaens",          email: "anne.adriaens1@telenet.be",  phone: "+32496810210", pass: "Discovery Pass" },
+const SUPABASE_URL      = "https://brojstkxqgvtzkgncggy.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJyb2pzdGt4cWd2dHprZ25jZ2d5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwOTQ3NzMsImV4cCI6MjA5MjY3MDc3M30.OwHmE2awvqG1ffyXUpy5CUvLPBYzQHgJisLAlE6Hl4U";
 
-  // Friday Pass
-  { id: 1780, name: "Akshaya Sundar",         email: "akshayas27@gmail.com",        phone: "+31626131937", pass: "Friday Pass" },
-  { id: 1695, name: "Amy Symynck",            email: "amy.symynck@hotmail.com",     phone: "+32473604908", pass: "Friday Pass" },
-  { id: 1779, name: "Florence Glineur",       email: "bollydeewani.asso@gmail.com", phone: "+33661495679", pass: "Friday Pass" },
-  { id: 1778, name: "Aniqa Nawar",            email: "Kimi.mojo@gmail.com",         phone: "+32485458252", pass: "Friday Pass" },
-  { id: 1173, name: "Swati Gupta",            email: "Sggup1@protonmail.com",       phone: "+32499415221", pass: "Friday Pass" },
-  { id: 1281, name: "Kiran Maya Priya Barua", email: "kiranmaya247@outlook.com",    phone: "+32492511530", pass: "Friday Pass" },
-  { id: 1796, name: "Shilpa Joy",             email: "shilpajoyt@gmail.com",        phone: "+31621904351", pass: "Friday Pass" },
-  { id: 1078, name: "Silva Basu",             email: "basu.silva7@gmail.com",       phone: "+32472374617", pass: "Friday Pass" },
+/* Privacy-safe lookup. Anon key + RLS means a snooper viewing the source
+   can only call the RPC; they can't dump the registry table. The RPC
+   returns one matched record (with op_performer, addons, gala count
+   already merged in) or a refusal — never a list of candidates.        */
+async function lookupParticipant(query) {
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/bp_lookup_participant`, {
+      method: "POST",
+      headers: {
+        "apikey":         SUPABASE_ANON_KEY,
+        "Authorization":  `Bearer ${SUPABASE_ANON_KEY}`,
+        "Content-Type":   "application/json",
+        "Accept":         "application/json",
+      },
+      body: JSON.stringify({ q: query }),
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) return { kind: "error", code: res.status };
+    return await res.json();
+  } catch (err) {
+    return { kind: "error", code: err.name === "AbortError" ? "timeout" : "network" };
+  }
+}
 
-  // Full Festival Pass
-  { id: 1000, name: "Swapnil Dagliya",            email: "swapnildagliya@gmail.com",      phone: "+32472000000", pass: "Full Festival Pass", isABC: true },
-  { id: 1251, name: "Laurien De Ridder",          email: "laurien.de.ridder@hotmail.com", phone: "+32477912850", pass: "Full Festival Pass", isABC: true },
-  { id: 1144, name: "Martine Bulté",              email: "martine.bulte@telenet.be",      phone: "+32498050075", pass: "Full Festival Pass" },
-  { id: 1728, name: "Anellia Veerasamy",          email: "anellia.danse@gmail.com",       phone: "+33750919604", pass: "Full Festival Pass" },
-  { id: 1781, name: "Hajar Amrani",               email: "hajar902@hotmail.com",          phone: "+32484078089", pass: "Full Festival Pass" },
-  { id: 1243, name: "Kaushika Athiyanam Kumar",   email: "kosh.14291@gmail.com",          phone: "+31645497541", pass: "Full Festival Pass", isABC: true },
-  { id: 1276, name: "Sara Van Holm",              email: "sara.vanholm@gmail.com",        phone: "+32473805714", pass: "Full Festival Pass", isABC: true },
-  { id: 1246, name: "Narcisse Merlier",           email: "narcisse.merlier@gmail.com",    phone: "+32479440804", pass: "Full Festival Pass", isABC: true },
-  { id: 1250, name: "Haike Bourgeois",            email: "haikebourgeois@gmail.com",      phone: "+32472948420", pass: "Full Festival Pass", isABC: true },
-  { id: 1247, name: "Chiara Bisinelli",           email: "chiarabisinelli3@gmail.com",    phone: "+32487728079", pass: "Full Festival Pass", isABC: true },
-  { id: 1275, name: "Shreya Vaidya",              email: "shreyasmit@yahoo.co.in",        phone: "+32494915507", pass: "Full Festival Pass", isABC: true },
-  { id: 1226, name: "Sofie Zwaenepoel",           email: "sofiezwaenepoel@gmail.com",     phone: "+32479403129", pass: "Full Festival Pass" },
-  { id: 1257, name: "Juanita Koerts",             email: "juanita.koerts@gmail.com",      phone: "+31652116639", pass: "Full Festival Pass" },
-  { id: 1261, name: "Nikta Jaamei",               email: "nikta.jaamei@gmail.com",        phone: "+41796813516", pass: "Full Festival Pass" },
-  { id: 1269, name: "Sujitha Kanagaratnam",       email: "Sujitha.Kanagaratnam@gmail.com",phone: "+41793170308", pass: "Full Festival Pass" },
-  { id: 1260, name: "Koen Walraevens",            email: "koenwalraevens@hotmail.com",    phone: "+32472616510", pass: "Full Festival Pass" },
-  { id: 1265, name: "Barbara Vogelaers",          email: "b_vogelaers@hotmail.com",       phone: "+32489575349", pass: "Full Festival Pass" },
-  { id: 1258, name: "Dounia Chaoui",              email: "chaoui.d@gmail.com",            phone: "+32475295239", pass: "Full Festival Pass" },
-  { id: 1262, name: "Natacha Bourakis",           email: "natacha.bourakis@gmail.com",    phone: "+41797265288", pass: "Full Festival Pass" },
-  { id: 1266, name: "Yevgena Piguet",             email: "sayo-misora@hotmail.com",       phone: "+41786862026", pass: "Full Festival Pass" },
-  { id: 1267, name: "Marylaure Oddershede",       email: "panosse@bluewin.ch",            phone: "+41786288739", pass: "Full Festival Pass" },
-  { id: 1263, name: "Rosalie Marguerat",          email: "marguerosa374@gmail.com",       phone: "+41796483156", pass: "Full Festival Pass" },
-  { id: 1317, name: "Sonam Shah",                 email: "sonamajay92@gmail.com",         phone: "+447960350326", pass: "Full Festival Pass" },
-  { id: 1322, name: "Kaleel Anwar",               email: "kaleelanwar@gmail.com",         phone: "+447714995813", pass: "Full Festival Pass" },
-  { id: 1321, name: "Kat Bailey",                 email: "Kat.a.bailey@gmail.com",        phone: "+447977591917", pass: "Full Festival Pass" },
-  { id: 1473, name: "Nandini Motte dit Falisse",  email: "Nfalisse@gmail.com",            phone: "+32477921244", pass: "Full Festival Pass" },
-  { id: 1382, name: "Naomi Mabita",               email: "baharito@protonmail.ch",        phone: "+32487886663", pass: "Full Festival Pass" },
-  { id: 1724, name: "Elodie Shanti Pouyet",       email: "natyam.atma@gmail.com",         phone: "+33669379869", pass: "Full Festival Pass" },
-  { id: 1358, name: "Marion",                     email: "canaim65@hotmail.fr",           phone: "+33787198472", pass: "Full Festival Pass" },
 
-  // Saturday Pass
-  { id: 1786, name: "Divina Anil",            email: "divuanil96@gmail.com",      phone: "+352661624698", pass: "Saturday Pass" },
-
-  // Sunday Pass
-  { id: 1740, name: "Ellie Westerlynck",      email: "ellie.westerlynck@gmail.com", phone: "+33666754131", pass: "Sunday Pass" },
-  { id: 1741, name: "Aurélie Pihan",          email: "aureliepihan@hotmail.fr",     phone: "+33629515842", pass: "Sunday Pass" },
-
-  // Charter Pass — paid per workshop, no festival pass
-  { id: 1095, name: "Heidi Vertessen",        email: "heidi.vertessen@hotmail.com", phone: "+32485490204", pass: "Charter Pass", customWorkshops: ["garba","lavani"] },
-  { id: 1119, name: "Svetlana",               email: "bubsveta@yahoo.com",          phone: "",            pass: "Charter Pass", customWorkshops: ["bollyfolk","garba","fusion"] },
-  { id: 1145, name: "Elena Bambina",          email: "bambinaelena@gmail.com",      phone: "+393278638023",pass: "Charter Pass", customWorkshops: ["bollyfolk"] },
-  { id: 1315, name: "Carole Royer",           email: "carole.royer.perso@gmail.com",phone: "+33783033682", pass: "Charter Pass", customWorkshops: ["techLab"] },
-  { id: 1348, name: "Siveka Puvanathavaparan",email: "p.siveka@gmail.com",          phone: "+33699671949", pass: "Charter Pass", customWorkshops: ["kuthu","chhau","abhinaya"] },
-  { id: 1546, name: "Stéphanie Horemans",     email: "horemansstephanie@gmail.com", phone: "+32473895792", pass: "Charter Pass", customWorkshops: ["techLab"] },
-  { id: 1807, name: "Shweta Shekhar Shekhar", email: "Shwetashekhardance@gmail.com",phone: "+31639273503", pass: "Charter Pass", customWorkshops: ["bollyfolk","garba","kuthu","fusion","desiAfro"] },
-  // Elsa — Dounia's +1 (shares Shoonya ID 1258, no own email)
-  { id: "1258·E", name: "Elsa", email: "", phone: "", pass: "Charter Pass", customWorkshops: ["kuthu","chhau","giddha"], guestOf: "Dounia Chaoui" },
-];
-
-/* Pass-holder add-ons — workshops paid for OUTSIDE the bundle.
-   These get appended to the participant's regular pass itinerary.            */
-const PASS_ADDONS = {
-  1078: ["fusion","lavani"],     // Silva Basu — Friday Pass + Sunday workshops paid extra
-  1173: ["techLab","cheraw"],    // Swati Gupta — Friday Pass + Tech Lab + Cheraw
-  1728: ["techLab"],             // Anellia VEERASAMY — Full Fest + Tech Lab paid (€60, not ABC)
-  1724: ["techLab"],             // Elodie Shanti Pouyet — Full Fest + Tech Lab paid (€60, not ABC)
-};
-
-/* ============================================================
-   3. GALA SHOWCASE TICKETS (verbatim from Performances Report)
-   Lookup rule: name match first, email fallback.
-   ============================================================ */
-const GALA_TICKETS = [
-  { name: "Heidi Vertessen",        email: "heidi.vertessen@hotmail.com",    quantity: 2 },
-  { name: "Brenda Claeys",          email: "brenda.claeys@bwzc.be",          quantity: 5 },
-  { name: "Brenda Claeys",          email: "brenda.claeys@bwzc.be",          quantity: 3 },
-  { name: "Jannes Van de Ponseele", email: "jannes.vandeponseele@gmail.com", quantity: 4 },
-  { name: "Pieter Swinnen",         email: "nathalie.craninx@skynet.be",     quantity: 2 },
-  { name: "Demey Marc",             email: "marc-demey@telenet.be",          quantity: 2 },
-  { name: "Benjamin Coene",         email: "bcoene@yahoo.com",               quantity: 1 },
-  { name: "Julie Anthoons",         email: "julie.anthoons@hotmail.com",     quantity: 6 },
-  { name: "Lou Deruytter",          email: "louisederuytter@live.be",        quantity: 4 },
-  { name: "Marthe Smetryns",        email: "marthesmetryns@hotmail.com",     quantity: 2 },
-  { name: "Rania Goemans",          email: "raniagoemans@hotmail.com",       quantity: 2 },
-  { name: "Xan Albrecht",           email: "xan.albrecht@gmail.com",         quantity: 1 },
-  { name: "Jonas Vanaelst",         email: "jonas.vanaelst@hotmail.com",     quantity: 1 },
-  { name: "Marion Dumail",          email: "canaim65@hotmail.fr",            quantity: 1 },
-  { name: "Reem",                   email: "Reem4221690@gmail.com",          quantity: 1 },
-  { name: "Koen Walraevens",        email: "koenwalraevens@hotmail.com",     quantity: 5 },
-  { name: "Myriam Heuvelmans",      email: "koenwalraevens@hotmail.com",     quantity: 1 },
-  { name: "Dylan Thysebaerdt",      email: "dylan110892@gmail.com",          quantity: 1 },
-  { name: "claeys brenda",          email: "brenda.claeys@bwzc.be",          quantity: 2 },
-  { name: "claeys brenda",          email: "brenda.claeys@bwzc.be",          quantity: 2 },
-  { name: "Elena",                  email: "bambinaelena@gmail.com",         quantity: 1 },
-  { name: "Aurélie Pihan",          email: "aureliepihan@hotmail.fr",        quantity: 2 },
-  { name: "Elena Bambina",          email: "bambinaelena@gmail.com",         quantity: 2 },
-  { name: "Jasper Hamann",          email: "jasperhamann@gmail.com",         quantity: 1 },
-  { name: "Iris Verschaeve",        email: "irisverschaeve@gmail.com",       quantity: 1 },
-  { name: "Pascale Cuigniez",       email: "pascale.cuigniez@telenet.be",    quantity: 1 },
-  { name: "Caluwe",                 email: "anne.caluwe@hotmail.be",         quantity: 1 },
-  { name: "Kamini Mehra",           email: "kamini.mehra@telenet.be",        quantity: 3 },
-  { name: "Alakh Dhruv Chopra",     email: "basu.silva7@gmail.com",          quantity: 1 },
-  { name: "Mihika Krick",           email: "mihika@live.be",                 quantity: 1 },
-  { name: "Judith ottoy",           email: "judith.ottoy@gmail.com",         quantity: 2 },
-  { name: "Julie Anthoons",         email: "julie.anthoons@hotmail.com",     quantity: 2 },
-  { name: "Hanne Vandueren",        email: "hannevandueren@hotmail.com",     quantity: 1 },
-  { name: "Punithah Krishnan",      email: "jan.roobrouck@gmail.com",        quantity: 5 },
-  { name: "Jeroen Embrechts",       email: "jeroen.embrechts@hotmail.com",   quantity: 1 },
-  { name: "Nathalie Jennes",        email: "nathaliejennes@live.be",         quantity: 2 },
-  { name: "Guido Duwel",            email: "guido@hortides.be",              quantity: 2 },
-  { name: "Swati Gupta",            email: "Sggup1@protonmail.com",          quantity: 2 },
-  { name: "Laurien De Riddee",      email: "laurien.de.ridder@hotmail.com",  quantity: 2 },
-  { name: "Bruno Braquine",         email: "bruno@wincom.be",                quantity: 1 },
-  { name: "Charlotte Germonpré",    email: "charlotte.germonpre@gmail.com",  quantity: 1 },
-  { name: "Eléonore Tonnel",        email: "eleonore.tonnel@laposte.net",    quantity: 1 },
-  { name: "Chiara Bisinelli",       email: "chiarabisinelli3@gmail.com",     quantity: 1 },
-  { name: "Siddhy Shetty",          email: "siddhyshetty9@gmail.com",        quantity: 1 },
-  { name: "Amy symynck",            email: "amy.symynck@hotmail.com",        quantity: 3 },
-  { name: "Aaricia Ponnet",         email: "aaricia.ponnet@gmail.com",       quantity: 1 },
-  { name: "Shweta Shekhar",         email: "Shwetashekhardance@gmail.com",   quantity: 1 },
-];
 
 /* Wristband colours — sampled from Swapnil's physical Tyvek bands.
    These appear ONLY on the boarding-pass corner ribbon. The rest of
@@ -327,17 +226,6 @@ const PASS_RIBBON = {
   "Charter Pass":        { color: "#0A0A0A", label: "Charter"      }, // black — no physical wristband; digital marker only
 };
 
-function getGalaTickets(participant) {
-  const nameSum = GALA_TICKETS
-    .filter(g => g.name.toLowerCase().trim() === participant.name.toLowerCase().trim())
-    .reduce((s, g) => s + g.quantity, 0);
-  if (nameSum > 0) return { count: nameSum, source: "name" };
-  const emailSum = GALA_TICKETS
-    .filter(g => g.email && g.email.toLowerCase().trim() === participant.email.toLowerCase().trim())
-    .reduce((s, g) => s + g.quantity, 0);
-  if (emailSum > 0) return { count: emailSum, source: "email" };
-  return { count: 0, source: null };
-}
 
 /* ============================================================
    4. ITINERARY COMPOSITION
@@ -345,11 +233,10 @@ function getGalaTickets(participant) {
 function computeItinerary(participant) {
   const items = [];
   const seen = new Set();
-  const opSlot = OP_PERFORMERS[participant.name];
+  const opSlot = participant.opPerformer || null;
 
   // ABC bonus — Tech & Tools Lab is auto-included for ABC dancers who hold
   // a Full Festival Pass (Zoho doesn't enrol ABC into the Lab automatically).
-  // Skip if Anellia/Elodie etc. already have it via PASS_ADDONS.
   if (participant.isABC && participant.pass === "Full Festival Pass") {
     items.push({ ...W.techLab, isABCBonus: true });
     seen.add("techLab");
@@ -362,8 +249,8 @@ function computeItinerary(participant) {
     : (PASS_INCLUDES[participant.pass] || []);
   baseIds.forEach(id => { if (!seen.has(id) && W[id]) { items.push(W[id]); seen.add(id); } });
 
-  // Pass-holder add-ons (Silva, Swati, Anellia, Elodie etc.) — paid extra.
-  const addons = PASS_ADDONS[participant.id] || [];
+  // Pass-holder add-ons (Silva, Swati, Anellia, Elodie) — paid extra.
+  const addons = participant.addonWorkshops || [];
   addons.forEach(id => { if (!seen.has(id) && W[id]) { items.push({ ...W[id], isAddon: true }); seen.add(id); } });
 
   const includesOP =
@@ -374,7 +261,7 @@ function computeItinerary(participant) {
     items.push({
       ...OPENING_PARTY,
       performerSlot: opSlot ? opSlot.block : null,
-      performerWith: opSlot && !opSlot.solo ? opSlot.with : null,
+      performerWith: opSlot && !opSlot.solo ? (opSlot.with || null) : null,
     });
   }
 
@@ -389,7 +276,7 @@ function computeItinerary(participant) {
     items,
     hasGalaCallout: true,
     hasTechLabCallout: !participant.isABC,
-    opPerformer: opSlot || null,
+    opPerformer: opSlot,
   };
 }
 
@@ -751,51 +638,23 @@ function ArrivalJourney() {
   const [error, setError] = useState("");
   const reduceMotion = useReducedMotion();
 
-  /* Privacy-safe match. Layered, but never reveals other people's names.
-       Returns { kind, match } where kind = "exact" | "ambig" | "none".
-       If ambiguous, the UI tells the user to be more specific — it does
-       NOT show who else is on the list.                                    */
-  const findMatch = (q) => {
-    const needle = q.trim().toLowerCase();
-    if (!needle) return { kind: "none" };
-    // 1. Exact email — strongest signal
-    const byEmail = PARTICIPANTS.filter(p => p.email && p.email.toLowerCase() === needle);
-    if (byEmail.length === 1) return { kind: "exact", match: byEmail[0] };
-    // 2. Exact full name (case-insensitive, normalised whitespace)
-    const norm = (s) => s.toLowerCase().replace(/\s+/g, " ").trim();
-    const byFullName = PARTICIPANTS.filter(p => norm(p.name) === norm(needle));
-    if (byFullName.length === 1) return { kind: "exact", match: byFullName[0] };
-    // 3. Unique prefix on a name token (first or last name only)
-    const byPrefix = PARTICIPANTS.filter(p =>
-      p.name.toLowerCase().split(/\s+/).some(part => part.startsWith(needle))
-    );
-    if (byPrefix.length === 1) return { kind: "exact", match: byPrefix[0] };
-    if (byPrefix.length > 1)   return { kind: "ambig" };
-    // 4. Substring fallback (only if unique)
-    const byContains = PARTICIPANTS.filter(p =>
-      p.name.toLowerCase().includes(needle) ||
-      (p.email && p.email.toLowerCase().includes(needle))
-    );
-    if (byContains.length === 1) return { kind: "exact", match: byContains[0] };
-    if (byContains.length > 1)   return { kind: "ambig" };
-    return { kind: "none" };
-  };
-
-  const handleEnter = () => {
+    const handleEnter = async () => {
     setError("");
     if (!query.trim()) { setError("Tell us your name or the email you registered with."); return; }
     setPhase("searching");
-    setTimeout(() => {
-      const { kind, match } = findMatch(query);
-      if (kind === "exact") { setParticipant(match); setPhase("transit"); return; }
-      if (kind === "ambig") {
-        // Privacy: never list candidates. Ask the user to be more specific.
-        setError("We found more than one match. Type your full name or the email you registered with.");
-        setPhase("gate"); return;
-      }
-      setError("We couldn't find that name in the registry. Try your full name or the email you used to book.");
-      setPhase("gate");
-    }, 900);
+    const result = await lookupParticipant(query);
+    if (result.kind === "exact") { setParticipant(result.match); setPhase("transit"); return; }
+    if (result.kind === "ambig") {
+      // Privacy: never list candidates. Ask the user to be more specific.
+      setError("We found more than one match. Type your full name or the email you registered with.");
+      setPhase("gate"); return;
+    }
+    if (result.kind === "error") {
+      setError("We couldn't reach the registry just now. Check your connection or find us at the welcome desk.");
+      setPhase("gate"); return;
+    }
+    setError("We couldn't find that name in the registry. Try your full name or the email you used to book.");
+    setPhase("gate");
   };
 
   // Phase auto-advance:
@@ -1741,7 +1600,7 @@ function BoardingPassPhase({ participant, onReset }) {
   const origin = inferOrigin(participant.phone);
   const itinerary = useMemo(() => computeItinerary(participant), [participant]);
   const firstName = participant.name.split(" ")[0];
-  const gala = useMemo(() => getGalaTickets(participant), [participant.email, participant.name]);
+  const gala = { count: participant.galaTickets || 0 };
   const fromCode = airportCode(origin.code);
 
   return (
