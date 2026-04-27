@@ -281,22 +281,14 @@ function computeItinerary(participant) {
 }
 
 /* ============================================================
-   5. ORIGIN INFERENCE  (country-level from phone code)
+   5. ORIGIN HELPERS  — origin code/country come from Supabase pre-derived
+   (see 002_phone_redaction.sql). Phone numbers never enter the JS.
    ============================================================ */
-const ORIGINS = {
-  "+31":  { country: "Netherlands",    code: "NL" },
-  "+32":  { country: "Belgium",        code: "BE" },
-  "+33":  { country: "France",         code: "FR" },
-  "+352": { country: "Luxembourg",     code: "LU" },
-  "+41":  { country: "Switzerland",    code: "CH" },
-  "+44":  { country: "United Kingdom", code: "UK" },
-  "+447": { country: "United Kingdom", code: "UK" },
-};
-function inferOrigin(phone) {
-  if (!phone) return { country: "Worldwide", code: "WW" };
-  const prefixes = Object.keys(ORIGINS).sort((a, b) => b.length - a.length);
-  for (const p of prefixes) if (phone.startsWith(p)) return ORIGINS[p];
-  return { country: "Worldwide", code: "WW" };
+function originFromMatch(p) {
+  return {
+    code:    p.originCode    || "—",
+    country: p.originCountry || "Worldwide",
+  };
 }
 
 /* ============================================================
@@ -625,6 +617,7 @@ const LandmarkLabel = {
   NL: "Amsterdam",
   CH: "Matterhorn",
   LU: "Notre-Dame, Luxembourg",
+  IT: "Italy",
   WW: "the world",
 };
 
@@ -972,7 +965,7 @@ function _DisambiguatePhase_DO_NOT_USE({ query, matches, onPick, onBack }) {
    13. TRANSIT — origin landmark + plane on arc + walk to Shoonya
    ============================================================ */
 function TransitPhase({ participant, onSkip }) {
-  const origin = inferOrigin(participant.phone);
+  const origin = originFromMatch(participant);
   const firstName = participant.name.split(" ")[0];
   const landmarkLabel = LandmarkLabel[origin.code] || origin.country;
 
@@ -1597,7 +1590,7 @@ function FloorMedia({ src, alt }) {
    16. BOARDING PASS — full airline ticket aesthetic
    ============================================================ */
 function BoardingPassPhase({ participant, onReset }) {
-  const origin = inferOrigin(participant.phone);
+  const origin = originFromMatch(participant);
   const itinerary = useMemo(() => computeItinerary(participant), [participant]);
   const firstName = participant.name.split(" ")[0];
   const gala = { count: participant.galaTickets || 0 };
