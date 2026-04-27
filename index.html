@@ -619,6 +619,7 @@ const LandmarkLabel = {
   CH: "Matterhorn",
   LU: "Notre-Dame, Luxembourg",
   IT: "Italy",
+  SC: "Seychelles",
   WW: "the world",
 };
 
@@ -1175,11 +1176,18 @@ function ShoonyaPhase({ onSkip }) {
   return (
     <section className="min-h-screen relative flex flex-col items-center justify-center overflow-hidden" style={{ background: "#000" }}>
       {/* Facade with Ken Burns — fades in slowly *underneath* the wheel,
-          so by the time the portal closes the image is fully present.    */}
+          so by the time the portal closes the image is fully present.
+          Filter dims + desaturates the photograph so the white display
+          type and saffron accents pop reliably regardless of stone hue. */}
       <motion.div className="absolute inset-0"
         initial={{ opacity: 0, scale: 1 }} animate={{ opacity: 1, scale: 1.05 }}
         transition={{ duration: 4.5, delay: 0.4, ease: EASE }}
-        style={{ backgroundImage: "url('./shoonya-facade.jpg')", backgroundSize: "cover", backgroundPosition: "center" }} />
+        style={{
+          backgroundImage: "url('./shoonya-facade.jpg')",
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          filter: "brightness(0.55) saturate(0.85) contrast(1.05)",
+        }} />
 
       {/* KONARK PORTAL — the wheel zooms in, expands and fades.
           The journey lands inside the wheel; the wheel opens onto Shoonya. */}
@@ -1197,8 +1205,14 @@ function ShoonyaPhase({ onSkip }) {
         </svg>
       </motion.div>
 
+      {/* Two-layer scrim: a centred radial pocket darkens behind the
+          display text, and a vertical gradient strengthens top + bottom
+          edges. Combined with the brightness filter on the facade, the
+          white "Shoonya." display reads cleanly on any photo behind it. */}
       <div className="absolute inset-0" style={{
-        background: "linear-gradient(180deg, rgba(0,0,0,0.18) 0%, rgba(0,0,0,0.0) 22%, rgba(0,0,0,0.0) 55%, rgba(0,0,0,0.65) 100%)",
+        background:
+          "radial-gradient(ellipse 60% 45% at 50% 50%, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.0) 80%)," +
+          "linear-gradient(180deg, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.10) 30%, rgba(0,0,0,0.10) 60%, rgba(0,0,0,0.85) 100%)",
       }} />
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 1, delay: 2.8, ease: EASE }}
         className="absolute top-12 left-0 right-0 text-center">
@@ -1239,8 +1253,10 @@ function ShoonyaPhase({ onSkip }) {
           The doors are open — the sound of feet, breath and bells already inside.
         </motion.p>
       </div>
+      {/* Bottom eyebrow — lifted on mobile so it clears the Skip control
+          tucked into the bottom-right corner.                              */}
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.8, delay: 4.9, ease: EASE }}
-        className="absolute bottom-10 left-0 right-0 text-center">
+        className="absolute bottom-24 sm:bottom-10 left-0 right-0 text-center px-24 sm:px-6">
         <Eyebrow color="rgba(255,255,255,0.55)">Take a moment to find your bearings</Eyebrow>
       </motion.div>
 
