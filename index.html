@@ -1291,7 +1291,7 @@ const FLOORS = [
     rooms: [{ name: "Changing room", weight: "muted" }],
     desc: "The half-level between floors. Drop your outside shoes, change into dance attire, leave bags here. Shared, considerate, fluid.",
     sessions: ["Open all three days"],
-    media: "./venue/changing-room.jpg",
+    media: null,  // dormitory shot wasn't the changing room — skip until a real photo lands
   },
   {
     key: "F1", label: "1st floor",
@@ -1510,7 +1510,9 @@ function FloorRow({ floor, index, active, anyActive, onTap }) {
                     </ul>
                   )}
                 </div>
-                <FloorMedia src={floor.media} alt={floor.rooms[0]?.name || floor.label} />
+                {floor.media && (
+                  <FloorMedia src={floor.media} alt={floor.rooms[0]?.name || floor.label} />
+                )}
               </div>
             </div>
           </motion.div>
