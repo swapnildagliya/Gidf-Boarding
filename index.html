@@ -20,11 +20,23 @@
 <link rel="preload" as="image" href="./shoonya-facade.jpg">
 
 <!--
-  NOTE FOR PRODUCTION:
-  Tailwind Play CDN + Babel-standalone are dev-only conveniences (~3MB).
-  Ship via the canonical /ArrivalJourney.jsx through Vite/esbuild for
-  the production build (~150KB total bundle). This single-file build is
-  for local preview + GitHub Pages drop-in.
+  PRODUCTION BUILD (post-festival migration path):
+
+      npx create-vite@latest gidf-boarding --template react
+      cd gidf-boarding
+      npm install framer-motion lucide-react
+      cp "../GIDF Boarding pass/ArrivalJourney.jsx" src/App.jsx
+      # add the Tailwind setup per Vite docs, paste the :root token
+      # block from this file into src/index.css, then:
+      npm run build
+
+  Result: ~150KB minified bundle (React + framer-motion + your code),
+  tree-shaken Tailwind, no in-browser JSX transpile. Drop the dist/
+  contents into the GitHub Pages repo via the existing sync script.
+
+  The current single-file build (Tailwind Play CDN + Babel-standalone,
+  ~3MB) is for local preview + GitHub Pages drop-in only — fine for
+  this festival, suboptimal for repeat traffic.
 -->
 <script src="https://cdn.tailwindcss.com"></script>
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -33,7 +45,29 @@
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
 <style>
-  html, body { margin: 0; background: #fff; }
+  /* ────────────────────────────────────────────────────────────
+     Design tokens — single source of truth for the palette.
+     Migration in progress: high-frequency colours below are token-backed,
+     SVG attribute values stay as literals for older Safari compatibility
+     (SVG `fill="var(--x)"` support landed in Safari 9.1, edge cases exist).
+     ──────────────────────────────────────────────────────────── */
+  :root {
+    --paper:          #FFFFFF;
+    --ink:            #000000;
+    --vibrant:        #E85D1F;   /* hairlines, large display, wristband */
+    --vibrant-text:   #C44715;   /* AA-compliant for small text on paper */
+    --goldenrod:      #FBC70F;   /* ABC bonus pill bg */
+    --goldenrod-text: #A6810A;   /* ABC bonus accent text */
+    --charter:        #0A0A0A;   /* charter wristband ribbon */
+    --charcoal:       #4A4A4A;   /* body text */
+    --mute:           #6B6B6B;   /* AA-compliant secondary text */
+    --mute-decor:     #8A8A8A;   /* decorative grey, not for text */
+    --mist:           #D6D6D6;   /* hairline rules */
+    --rule:           #E0E0E0;   /* card borders */
+    --panel:          #FAFAFA;   /* hover backgrounds */
+    --panel-warm:     #FFF6EE;   /* active venue floor */
+  }
+  html, body { margin: 0; background: var(--paper); }
   body {
     font-family: "Inter", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
     color: #4A4A4A;
@@ -42,7 +76,7 @@
     overflow-x: hidden;
   }
   ::selection { background: #E85D1F; color: #fff; }
-  *:focus-visible { outline: 1px solid #E85D1F; outline-offset: 3px; }
+  *:focus-visible { outline: 1px solid var(--vibrant); outline-offset: 3px; }
   @media (prefers-reduced-motion: reduce) {
     * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
   }
@@ -53,7 +87,7 @@
 <div id="root"></div>
 
 <script type="text/babel" data-presets="env,react">
-const { useState, useEffect, useMemo, Fragment } = React;
+const { useState, useEffect, useMemo, useRef, Fragment } = React;
 const { motion, AnimatePresence, useReducedMotion } = window.Motion;
 
 /* ============================================================
@@ -162,6 +196,7 @@ const OPENING_PARTY = {
   studio: "Studio Ananta", floor: "Ground Floor",
   level: "Open to all", attire: "Long, flowy skirt or your dancing best",
   desc: "Doors from 19:30. Quick-fire costume workshop on the Kalbeliya look (20:00) flows into Swapnil's high-vibration community class on the soul of the desert (20:15), then the live band lights up Studio Ananta. DJ takes us late.",
+  notice: "Long skirts welcome — BYO skirt, dupatta or fabric, or borrow one from Shoonya if you don't have your own.",
 };
 
 const PASS_INCLUDES = {
@@ -190,25 +225,39 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
    returns one matched record (with op_performer, addons, gala count
    already merged in) or a refusal — never a list of candidates.        */
 async function lookupParticipant(query) {
-  try {
+  // One quiet retry after 800ms absorbs transient network blips
+  // (Shoonya wifi reconnect, Supabase cold start) without surfacing an
+  // error to the participant. Worst-case wait ≈ 9s, still in tolerance.
+  const attempt = async () => {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 8000);
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/bp_lookup_participant`, {
-      method: "POST",
-      headers: {
-        "apikey":         SUPABASE_ANON_KEY,
-        "Authorization":  `Bearer ${SUPABASE_ANON_KEY}`,
-        "Content-Type":   "application/json",
-        "Accept":         "application/json",
-      },
-      body: JSON.stringify({ q: query }),
-      signal: ctrl.signal,
-    });
-    clearTimeout(timer);
-    if (!res.ok) return { kind: "error", code: res.status };
-    return await res.json();
-  } catch (err) {
-    return { kind: "error", code: err.name === "AbortError" ? "timeout" : "network" };
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/bp_lookup_participant`, {
+        method: "POST",
+        headers: {
+          "apikey":         SUPABASE_ANON_KEY,
+          "Authorization":  `Bearer ${SUPABASE_ANON_KEY}`,
+          "Content-Type":   "application/json",
+          "Accept":         "application/json",
+        },
+        body: JSON.stringify({ q: query }),
+        signal: ctrl.signal,
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+  try {
+    return await attempt();
+  } catch (err1) {
+    await new Promise(r => setTimeout(r, 800));
+    try {
+      return await attempt();
+    } catch (err2) {
+      return { kind: "error", code: err2.name === "AbortError" ? "timeout" : "network" };
+    }
   }
 }
 
@@ -223,7 +272,7 @@ const PASS_RIBBON = {
   "Saturday Pass":       { color: "#E64C95", label: "Saturday"     }, // pink
   "Sunday Pass":         { color: "#4FA84A", label: "Sunday"       }, // green
   "Discovery Pass":      { color: "#7A7A7A", label: "Discovery"    }, // slate placeholder — no physical band specified yet
-  "Charter Pass":        { color: "#0A0A0A", label: "Charter"      }, // black — no physical wristband; digital marker only
+  "Charter Pass":        { color: "var(--charter)", label: "Charter"      }, // black — no physical wristband; digital marker only
 };
 
 
@@ -402,38 +451,12 @@ const PlaneIcon = ({ size = 22, color = "#E85D1F" }) => (
   </svg>
 );
 
-/* Peacock feather — drawn pointing right (eye leading, stem trailing).
-   When mounted on a path with offsetRotate="auto" it banks naturally with
-   the arc, so the eye always faces forward like a bird's flight.          */
-function PeacockFeather({ color = "#E85D1F" }) {
-  return (
-    <g aria-hidden="true">
-      {/* trailing stem */}
-      <line x1="-12" y1="0" x2="2" y2="0" stroke={color} strokeWidth="0.7" strokeLinecap="round" />
-      {/* outer ocellus (the iconic eye) */}
-      <ellipse cx="6" cy="0" rx="6.5" ry="4.2" stroke={color} strokeWidth="0.9" fill="none" />
-      {/* mid ring */}
-      <ellipse cx="6" cy="0" rx="4" ry="2.6" stroke={color} strokeWidth="0.6" fill="none" opacity="0.75" />
-      {/* solid pupil */}
-      <ellipse cx="6" cy="0" rx="2.2" ry="1.5" fill={color} />
-      {/* leading-edge barbs at the tip — three short rays */}
-      <line x1="12.5" y1="-2"   x2="16" y2="-4" stroke={color} strokeWidth="0.5" strokeLinecap="round" />
-      <line x1="13"   y1="0"    x2="17" y2="0"  stroke={color} strokeWidth="0.5" strokeLinecap="round" />
-      <line x1="12.5" y1="2"    x2="16" y2="4"  stroke={color} strokeWidth="0.5" strokeLinecap="round" />
-      {/* trailing barbs along the stem */}
-      <line x1="-2" y1="-1.5" x2="-5" y2="-4" stroke={color} strokeWidth="0.4" strokeLinecap="round" opacity="0.7" />
-      <line x1="-2" y1="1.5"  x2="-5" y2="4"  stroke={color} strokeWidth="0.4" strokeLinecap="round" opacity="0.7" />
-      <line x1="-7" y1="-1"   x2="-9" y2="-3" stroke={color} strokeWidth="0.35" strokeLinecap="round" opacity="0.6" />
-      <line x1="-7" y1="1"    x2="-9" y2="3"  stroke={color} strokeWidth="0.35" strokeLinecap="round" opacity="0.6" />
-    </g>
-  );
-}
 
 /* ============================================================
    8. SHARED PRIMITIVES
    ============================================================ */
 const Bindu = ({ className = "" }) => (
-  <span className={`inline-block leading-none ${className}`} style={{ margin: "0 0.35em", color: "#D6D6D6" }}>·</span>
+  <span className={`inline-block leading-none ${className}`} style={{ margin: "0 0.35em", color: "var(--mist)" }}>·</span>
 );
 
 const InfinityMark = ({ className = "", color = "#E85D1F" }) => (
@@ -599,6 +622,63 @@ const Landmark = ({ code, color = "#E85D1F", height = 110 }) => {
     </svg>
   );
 
+  if (code === "IT") return (
+    <svg viewBox="0 0 200 150" style={{ height: height * 0.85, width: "auto" }} {...common}>
+      {/* Colosseum — half-ellipse outer wall with rows of arches */}
+      <line x1="5" y1="135" x2="195" y2="135" />
+      <path d="M 25 135 Q 25 50, 100 45 Q 175 50, 175 135" />
+      <path d="M 28 110 Q 28 95, 100 92 Q 172 95, 172 110" opacity="0.7" strokeWidth={sw * 0.7} />
+      <path d="M 31 88 Q 31 75, 100 73 Q 169 75, 169 88" opacity="0.7" strokeWidth={sw * 0.7} />
+      <g strokeWidth={sw * 0.6}>
+        <path d="M 35 135 v-18 q4,-6 8,0 v18" />
+        <path d="M 55 135 v-18 q4,-6 8,0 v18" />
+        <path d="M 75 135 v-18 q4,-6 8,0 v18" />
+        <path d="M 95 135 v-18 q4,-6 8,0 v18" />
+        <path d="M 115 135 v-18 q4,-6 8,0 v18" />
+        <path d="M 135 135 v-18 q4,-6 8,0 v18" />
+        <path d="M 155 135 v-18 q4,-6 8,0 v18" />
+      </g>
+      <g strokeWidth={sw * 0.5} opacity="0.85">
+        <path d="M 40 110 v-13 q3,-5 6,0 v13" />
+        <path d="M 60 110 v-13 q3,-5 6,0 v13" />
+        <path d="M 80 110 v-13 q3,-5 6,0 v13" />
+        <path d="M 100 110 v-13 q3,-5 6,0 v13" />
+        <path d="M 120 110 v-13 q3,-5 6,0 v13" />
+        <path d="M 140 110 v-13 q3,-5 6,0 v13" />
+      </g>
+      <path d="M 145 70 L 150 60 L 155 65 L 162 55 L 170 62 L 175 58 L 178 80" strokeWidth={sw * 0.7} />
+    </svg>
+  );
+
+  if (code === "SC") return (
+    <svg viewBox="0 0 200 150" style={{ height: height * 0.85, width: "auto" }} {...common}>
+      {/* Seychelles — curving coconut palm + horizon + faint islands */}
+      <line x1="5" y1="135" x2="195" y2="135" />
+      <path d="M 5 135 Q 25 130, 45 132 L 50 135" opacity="0.4" strokeWidth={sw * 0.5} />
+      <path d="M 150 135 Q 170 132, 195 134" opacity="0.4" strokeWidth={sw * 0.5} />
+      <path d="M 95 135 Q 92 105, 100 75 Q 108 50, 105 32" strokeWidth={sw * 1.1} />
+      <path d="M 92 115 Q 96 115, 100 113" strokeWidth={sw * 0.4} opacity="0.6" />
+      <path d="M 95 95 Q 100 95, 105 93" strokeWidth={sw * 0.4} opacity="0.6" />
+      <path d="M 99 75 Q 104 75, 109 73" strokeWidth={sw * 0.4} opacity="0.6" />
+      <path d="M 102 55 Q 106 55, 110 53" strokeWidth={sw * 0.4} opacity="0.6" />
+      <circle cx="100" cy="38" r="2" strokeWidth={sw * 0.5} />
+      <circle cx="110" cy="40" r="2" strokeWidth={sw * 0.5} />
+      <g strokeWidth={sw * 0.7}>
+        <path d="M 105 30 Q 105 18, 95 8" />
+        <path d="M 105 30 Q 80 22, 55 18" />
+        <path d="M 105 30 Q 130 25, 158 22" />
+        <path d="M 105 30 Q 75 38, 48 50" />
+        <path d="M 105 30 Q 138 38, 162 53" />
+        <path d="M 105 30 Q 88 50, 78 70" />
+        <path d="M 105 30 Q 128 50, 132 72" />
+      </g>
+      <g strokeWidth={sw * 0.35} opacity="0.7">
+        <path d="M 90 24 l 2 -3 M 80 22 l 2 -3 M 70 20 l 2 -3" />
+        <path d="M 130 26 l -2 -3 M 142 26 l -2 -3 M 152 24 l -2 -3" />
+      </g>
+    </svg>
+  );
+
   // Default — globe
   return (
     <svg viewBox="0 0 100 100" style={{ height: height * 0.7, width: "auto" }} {...common}>
@@ -675,7 +755,7 @@ function ArrivalJourney() {
   const skipFromShoonya = () => setPhase("venue");
 
   return (
-    <div className="min-h-screen w-full" style={{ background: "#fff", color: "#4A4A4A" }}>
+    <div className="min-h-screen w-full" style={{ background: "var(--paper)", color: "var(--charcoal)" }}>
       <AnimatePresence mode="wait">
         {phase === "gate" && (
           <motion.div key="gate" {...fadeUp(0)}>
@@ -766,7 +846,7 @@ function GatePhase({ query, setQuery, error, onEnter }) {
           fontSize: "clamp(40px, 8vw, 72px)", lineHeight: 1.05, letterSpacing: "-0.005em", color: "#000",
         }}>
           Welcome to the<br />
-          <em style={{ fontStyle: "italic", color: "#E85D1F", fontWeight: 400 }}>festival.</em>
+          <em style={{ fontStyle: "italic", color: "var(--vibrant)", fontWeight: 400 }}>festival.</em>
         </motion.h1>
 
         <motion.p {...fadeUp(0.18)} className="text-center max-w-md mx-auto mb-10" style={{
@@ -778,12 +858,12 @@ function GatePhase({ query, setQuery, error, onEnter }) {
 
         <motion.div {...fadeUp(0.34)}>
           <div className="flex items-center" style={{
-            borderTop: "0.5px solid #D6D6D6",
-            borderBottom: error ? "1px solid #E85D1F" : "1px solid #000",
-            borderLeft: "0.5px solid #D6D6D6", borderRight: "0.5px solid #D6D6D6",
-            background: "#fff",
+            borderTop: "0.5px solid var(--mist)",
+            borderBottom: error ? "1px solid var(--vibrant)" : "1px solid var(--ink)",
+            borderLeft: "0.5px solid var(--mist)", borderRight: "0.5px solid var(--mist)",
+            background: "var(--paper)",
           }}>
-            <SearchIcon className="w-4 h-4 ml-4 flex-shrink-0" style={{ color: "#6B6B6B" }} />
+            <SearchIcon className="w-4 h-4 ml-4 flex-shrink-0" style={{ color: "var(--mute)" }} />
             <input type="text" value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && onEnter()}
@@ -796,7 +876,7 @@ function GatePhase({ query, setQuery, error, onEnter }) {
               className="flex-shrink-0 flex items-center gap-2 px-5 py-4 transition-opacity hover:opacity-80"
               style={{
                 /* AA-compliant saffron: white-on-#C44715 = 4.55:1 at 13px */
-                color: "#fff", background: "#C44715", fontFamily: "Inter, sans-serif", fontWeight: 500,
+                color: "var(--paper)", background: "var(--vibrant-text)", fontFamily: "Inter, sans-serif", fontWeight: 500,
                 fontSize: 13, letterSpacing: "0.08em", textTransform: "uppercase",
                 border: "none", cursor: "pointer",
               }}>
@@ -807,7 +887,7 @@ function GatePhase({ query, setQuery, error, onEnter }) {
             {error && (
               <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
                 role="alert" aria-live="polite"
-                className="mt-3 px-1" style={{ fontSize: 13, color: "#C44715", fontFamily: "Inter, sans-serif" }}>
+                className="mt-3 px-1" style={{ fontSize: 13, color: "var(--vibrant-text)", fontFamily: "Inter, sans-serif" }}>
                 {error}
               </motion.div>
             )}
@@ -817,9 +897,9 @@ function GatePhase({ query, setQuery, error, onEnter }) {
         <motion.div {...fadeUp(0.45)} className="mt-12 text-center">
           <div style={{
             fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontWeight: 400,
-            fontSize: 16, color: "#C44715",
+            fontSize: 16, color: "var(--vibrant-text)",
           }}>
-            1 — 3 May 2026<Bindu /><span style={{ color: "#4A4A4A", fontStyle: "normal" }}>Shoonya, Ghent</span>
+            1 — 3 May 2026<Bindu /><span style={{ color: "var(--charcoal)", fontStyle: "normal" }}>Shoonya, Ghent</span>
           </div>
         </motion.div>
       </div>
@@ -834,10 +914,10 @@ function SearchingPhase({ query }) {
   return (
     <section className="min-h-screen flex flex-col items-center justify-center px-6 text-center">
       <motion.div animate={{ rotate: 360 }} transition={{ duration: 2.4, ease: "linear", repeat: Infinity }} className="mb-6">
-        <SpinIcon className="w-6 h-6" style={{ color: "#E85D1F" }} />
+        <SpinIcon className="w-6 h-6" style={{ color: "var(--vibrant)" }} />
       </motion.div>
       <Eyebrow className="mb-3">Finding your pass</Eyebrow>
-      <div style={{ fontSize: 14, color: "#4A4A4A" }}>
+      <div style={{ fontSize: 14, color: "var(--charcoal)" }}>
         Looking up{" "}
         <em style={{ fontStyle: "italic", color: "#000", fontFamily: "'Playfair Display', Georgia, serif" }}>
           "{query}"
@@ -848,84 +928,6 @@ function SearchingPhase({ query }) {
   );
 }
 
-/* ============================================================
-   12b. DISAMBIGUATE — REMOVED for privacy reasons.
-   Earlier this phase listed the matching participants by name + email so the
-   user could pick themselves. That leaked PII (typing "Sw" exposed Swati and
-   Swapnil to anyone who tried). Replaced with a strict matcher that asks the
-   user to be more specific without ever revealing other names.
-   The component below is intentionally unused — left as a reference, do not
-   remount without solving the privacy question first.
-   ============================================================ */
-function _DisambiguatePhase_DO_NOT_USE({ query, matches, onPick, onBack }) {
-  return (
-    <section className="min-h-screen flex flex-col items-center justify-center px-6 py-12">
-      <div className="w-full max-w-xl">
-        <motion.div {...fadeUp(0)} className="text-center mb-6">
-          <Eyebrow>Multiple matches</Eyebrow>
-        </motion.div>
-        <motion.h2 {...fadeUp(0.1)} className="text-center mb-3" style={{
-          fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 500,
-          fontSize: "clamp(28px, 5vw, 40px)", lineHeight: 1.1, letterSpacing: "-0.005em", color: "#000",
-        }}>
-          We found a few — <em style={{ fontStyle: "italic", color: "#C44715", fontWeight: 400 }}>which one is you?</em>
-        </motion.h2>
-        <motion.p {...fadeUp(0.22)} className="text-center max-w-md mx-auto mb-8" style={{
-          fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontWeight: 400,
-          fontSize: 16, lineHeight: 1.4, color: "#000",
-        }}>
-          You typed <em style={{ color: "#C44715" }}>"{query}"</em> — these names match. Tap yours to continue.
-        </motion.p>
-
-        <motion.ul {...fadeUp(0.34)}
-          style={{ borderTop: "0.5px solid #D6D6D6", listStyle: "none", padding: 0, margin: 0 }}>
-          {matches.map((p, i) => (
-            <li key={`${p.id}-${i}`}>
-              <button onClick={() => onPick(p)}
-                aria-label={`Continue as ${p.name}, ${p.pass}`}
-                className="w-full text-left transition-colors hover:bg-[#FAFAFA]"
-                style={{
-                  display: "flex", alignItems: "center", justifyContent: "space-between",
-                  gap: 16, padding: "16px 4px", minHeight: 56,
-                  borderBottom: "0.5px solid #D6D6D6",
-                  background: "none", border: "none", borderBottomWidth: "0.5px",
-                  borderBottomStyle: "solid", borderBottomColor: "#D6D6D6",
-                  cursor: "pointer", width: "100%",
-                }}>
-                <div>
-                  <div style={{
-                    fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 500,
-                    fontSize: 18, lineHeight: 1.15, color: "#000", letterSpacing: "-0.005em",
-                  }}>
-                    {p.name}
-                  </div>
-                  <div className="mt-0.5" style={{ fontSize: 12, color: "#6B6B6B" }}>
-                    {p.pass}
-                    {p.email && <><Bindu />{p.email}</>}
-                  </div>
-                </div>
-                <ArrowRight className="w-4 h-4 flex-shrink-0" style={{ color: "#C44715" }} />
-              </button>
-            </li>
-          ))}
-        </motion.ul>
-
-        <motion.div {...fadeUp(0.48)} className="mt-8 text-center">
-          <button onClick={onBack}
-            style={{
-              fontFamily: "Inter, sans-serif", fontWeight: 500, fontSize: 12,
-              letterSpacing: "0.18em", textTransform: "uppercase", color: "#6B6B6B",
-              padding: "12px 16px", minHeight: 44,
-              background: "none", border: "none", cursor: "pointer",
-              borderBottom: "0.5px solid #D6D6D6",
-            }}>
-            <span aria-hidden="true">←</span> back to gate
-          </button>
-        </motion.div>
-      </div>
-    </section>
-  );
-}
 
 /* ============================================================
    13. TRANSIT — origin landmark + plane on arc + walk to Shoonya
@@ -946,7 +948,7 @@ function TransitPhase({ participant, onSkip }) {
         fontSize: "clamp(26px, 4.4vw, 38px)", lineHeight: 1.1, letterSpacing: "-0.005em", color: "#000",
       }}>
         {firstName}, the festival{" "}
-        <em style={{ fontStyle: "italic", color: "#E85D1F", fontWeight: 400 }}>breathes you in.</em>
+        <em style={{ fontStyle: "italic", color: "var(--vibrant)", fontWeight: 400 }}>breathes you in.</em>
       </motion.h2>
 
       <motion.p {...fadeUp(0.26)} className="text-center max-w-md mb-3" style={{
@@ -977,7 +979,7 @@ function AirportBadge({ code, label, highlight }) {
       <div className="flex items-center justify-center mb-1.5" style={{
         width: 52, height: 42,
         /* Border keeps bright saffron (decorative line, not text) */
-        border: highlight ? "1px solid #E85D1F" : "0.5px solid #D6D6D6",
+        border: highlight ? "1px solid var(--vibrant)" : "0.5px solid var(--mist)",
         /* Text uses AA-compliant darker saffron at 15px */
         color: highlight ? "#C44715" : "#000",
         fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 500,
@@ -985,7 +987,7 @@ function AirportBadge({ code, label, highlight }) {
       }}>
         {code}
       </div>
-      <Eyebrow color={highlight ? "#E85D1F" : "#4A4A4A"}>{label}</Eyebrow>
+      <Eyebrow color={highlight ? "#E85D1F" : "var(--charcoal)"}>{label}</Eyebrow>
     </div>
   );
 }
@@ -1173,6 +1175,7 @@ const InfinityMarkInline = ({ color }) => (
    14. SHOONYA facade
    ============================================================ */
 function ShoonyaPhase({ onSkip }) {
+  const reduceMotion = useReducedMotion();
   return (
     <section className="min-h-screen relative flex flex-col items-center justify-center overflow-hidden" style={{ background: "#000" }}>
       {/* Facade with Ken Burns — fades in slowly *underneath* the wheel,
@@ -1180,8 +1183,8 @@ function ShoonyaPhase({ onSkip }) {
           Filter dims + desaturates the photograph so the white display
           type and saffron accents pop reliably regardless of stone hue. */}
       <motion.div className="absolute inset-0"
-        initial={{ opacity: 0, scale: 1 }} animate={{ opacity: 1, scale: 1.05 }}
-        transition={{ duration: 4.5, delay: 0.4, ease: EASE }}
+        initial={{ opacity: 0, scale: 1 }} animate={{ opacity: 1, scale: reduceMotion ? 1 : 1.05 }}
+        transition={{ duration: reduceMotion ? 1.0 : 4.5, delay: reduceMotion ? 0 : 0.4, ease: EASE }}
         style={{
           backgroundImage: "url('./shoonya-facade.jpg')",
           backgroundSize: "cover",
@@ -1190,20 +1193,24 @@ function ShoonyaPhase({ onSkip }) {
         }} />
 
       {/* KONARK PORTAL — the wheel zooms in, expands and fades.
-          The journey lands inside the wheel; the wheel opens onto Shoonya. */}
-      <motion.div
-        className="absolute inset-0 flex items-center justify-center pointer-events-none"
-        initial={{ scale: 0.85, opacity: 1 }}
-        animate={{ scale: 2.6, opacity: 0 }}
-        transition={{ duration: 2.6, ease: EASE }}
-        style={{ zIndex: 5 }}
-        aria-hidden="true"
-      >
-        <svg width="540" height="540" viewBox="-220 -220 440 440"
-          style={{ maxWidth: "78vw", maxHeight: "78vh" }}>
-          <KonarkSun cx={0} cy={0} r={195} delay={0} opacity={0.85} duration={9} noFade />
-        </svg>
-      </motion.div>
+          Skipped entirely under prefers-reduced-motion: the rapid scale-up
+          plus continuous rotation could trigger vestibular discomfort. The
+          facade itself is the content; the portal is decorative.          */}
+      {!reduceMotion && (
+        <motion.div
+          className="absolute inset-0 flex items-center justify-center pointer-events-none"
+          initial={{ scale: 0.85, opacity: 1 }}
+          animate={{ scale: 2.6, opacity: 0 }}
+          transition={{ duration: 2.6, ease: EASE }}
+          style={{ zIndex: 5 }}
+          aria-hidden="true"
+        >
+          <svg width="540" height="540" viewBox="-220 -220 440 440"
+            style={{ maxWidth: "78vw", maxHeight: "78vh" }}>
+            <KonarkSun cx={0} cy={0} r={195} delay={0} opacity={0.85} duration={9} noFade />
+          </svg>
+        </motion.div>
+      )}
 
       {/* Two-layer scrim: a centred radial pocket darkens behind the
           display text, and a vertical gradient strengthens top + bottom
@@ -1222,21 +1229,21 @@ function ShoonyaPhase({ onSkip }) {
         <motion.h2 initial={{ opacity: 0, y: 22 }} animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 1.2, delay: 3.1, ease: EASE }} style={{
             fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontWeight: 400,
-            fontSize: "clamp(56px, 11vw, 110px)", lineHeight: 0.95, color: "#fff",
+            fontSize: "clamp(56px, 11vw, 110px)", lineHeight: 0.95, color: "var(--paper)",
             letterSpacing: "-0.005em", margin: 0,
           }}>
-          Shoonya<span style={{ color: "#E85D1F", fontStyle: "normal" }}>.</span>
+          Shoonya<span style={{ color: "var(--vibrant)", fontStyle: "normal" }}>.</span>
         </motion.h2>
         {/* शून्य — Sanskrit for void / zero. The studio's namesake, finally surfaced. */}
         <motion.div
-          initial={{ opacity: 0 }} animate={{ opacity: 0.55 }}
+          initial={{ opacity: 0 }} animate={{ opacity: 0.75 }}
           transition={{ duration: 1.4, delay: 3.8, ease: EASE }}
           aria-hidden="true"
           style={{
             fontFamily: "'Noto Serif Devanagari', 'Playfair Display', serif",
             fontWeight: 400,
             fontSize: "clamp(28px, 5.2vw, 52px)",
-            color: "#E85D1F",
+            color: "var(--vibrant)",
             letterSpacing: "0.04em",
             lineHeight: 1.1,
             marginTop: 8,
@@ -1248,7 +1255,7 @@ function ShoonyaPhase({ onSkip }) {
           transition={{ duration: 1.2, delay: 4.4, ease: EASE }}
           className="mt-6 max-w-md mx-auto" style={{
             fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontWeight: 400,
-            fontSize: "clamp(16px, 2vw, 19px)", lineHeight: 1.5, color: "#D6D6D6",
+            fontSize: "clamp(16px, 2vw, 19px)", lineHeight: 1.5, color: "var(--mist)",
           }}>
           The doors are open — the sound of feet, breath and bells already inside.
         </motion.p>
@@ -1257,7 +1264,7 @@ function ShoonyaPhase({ onSkip }) {
           tucked into the bottom-right corner.                              */}
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.8, delay: 4.9, ease: EASE }}
         className="absolute bottom-24 sm:bottom-10 left-0 right-0 text-center px-24 sm:px-6">
-        <Eyebrow color="rgba(255,255,255,0.55)">Take a moment to find your bearings</Eyebrow>
+        <Eyebrow color="rgba(255,255,255,0.78)">Take a moment to find your bearings</Eyebrow>
       </motion.div>
 
       {onSkip && <SkipControl onSkip={onSkip} label="Skip" color="rgba(255,255,255,0.7)" delay={1.2} />}
@@ -1315,7 +1322,7 @@ const FLOORS = [
       "Sun · 13:30 — Lavani",
       "Sun · 15:50 — Cheraw",
     ],
-    media: "./venue/ananta.jpg",
+    media: ["./venue/ananta.mp4", "./venue/bar.jpg"],  // Studio Ananta tour video + Shoonya Bar photo
   },
   {
     key: "BAS", label: "Basement",
@@ -1348,7 +1355,7 @@ function VenuePhase({ onContinue }) {
         fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 500,
         fontSize: "clamp(28px, 5vw, 44px)", lineHeight: 1.1, letterSpacing: "-0.005em", color: "#000",
       }}>
-        Find your <em style={{ fontStyle: "italic", color: "#C44715", fontWeight: 400 }}>bearings.</em>
+        Find your <em style={{ fontStyle: "italic", color: "var(--vibrant-text)", fontWeight: 400 }}>bearings.</em>
       </motion.h2>
       <motion.p {...fadeUp(0.22)} className="text-center max-w-md mb-10" style={{
         fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontWeight: 400,
@@ -1375,7 +1382,7 @@ function VenuePhase({ onContinue }) {
         className="mt-10 flex items-center gap-2 px-5 py-3 transition-opacity hover:opacity-80"
         style={{
           /* AA-compliant saffron */
-          color: "#fff", background: "#C44715", fontFamily: "Inter, sans-serif", fontWeight: 500,
+          color: "var(--paper)", background: "var(--vibrant-text)", fontFamily: "Inter, sans-serif", fontWeight: 500,
           fontSize: 13, letterSpacing: "0.08em", textTransform: "uppercase",
           border: "none", cursor: "pointer",
         }}>
@@ -1415,14 +1422,14 @@ function FloorRow({ floor, index, active, anyActive, onTap }) {
           className="flex items-stretch justify-between mx-auto"
           style={{
             width: widthPct + "%",
-            border: active ? "1.5px solid #C44715" : "0.5px solid #D6D6D6",
-            background: active ? "#FFF6EE" : "#fff",
+            border: active ? "1.5px solid var(--vibrant-text)" : "0.5px solid var(--mist)",
+            background: active ? "#FFF6EE" : "var(--paper)",
             minHeight: floor.key === "G" ? 80 : 64,
             transition: "border 200ms cubic-bezier(0.22,0.61,0.36,1), background 240ms cubic-bezier(0.22,0.61,0.36,1)",
           }}
         >
           {/* Left: floor code */}
-          <div className="flex items-center px-4" style={{ width: 130, borderRight: active ? "1.5px solid #C44715" : "0.5px solid #D6D6D6" }}>
+          <div className="flex items-center px-4" style={{ width: 130, borderRight: active ? "1.5px solid var(--vibrant-text)" : "0.5px solid var(--mist)" }}>
             <div>
               <div style={{
                 fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 500,
@@ -1432,7 +1439,7 @@ function FloorRow({ floor, index, active, anyActive, onTap }) {
                 {floor.key === "G" ? "GF" : floor.key === "BAS" ? "B" : floor.key === "MEZ" ? "M" : floor.key}
               </div>
               <div className="mt-1.5">
-                <Eyebrow color={active ? "#C44715" : "#8A8A8A"}>{floor.label}</Eyebrow>
+                <Eyebrow color={active ? "#C44715" : "var(--mute-decor)"}>{floor.label}</Eyebrow>
               </div>
             </div>
           </div>
@@ -1442,7 +1449,7 @@ function FloorRow({ floor, index, active, anyActive, onTap }) {
             <div className="flex-1 flex items-center">
               {floor.rooms.map((r, i) => (
                 <Fragment key={r.name}>
-                  {i > 0 && <div className="mx-4" style={{ width: 1, alignSelf: "stretch", background: "#D6D6D6" }} />}
+                  {i > 0 && <div className="mx-4" style={{ width: 1, alignSelf: "stretch", background: "var(--mist)" }} />}
                   <div className="flex-1">
                     <div style={{
                       fontFamily: "'Playfair Display', Georgia, serif",
@@ -1459,7 +1466,7 @@ function FloorRow({ floor, index, active, anyActive, onTap }) {
                 </Fragment>
               ))}
             </div>
-            <Chevron className="w-4 h-4 flex-shrink-0" style={{ color: active ? "#C44715" : "#8A8A8A" }} rotate={active} />
+            <Chevron className="w-4 h-4 flex-shrink-0" style={{ color: active ? "#C44715" : "var(--mute-decor)" }} rotate={active} />
           </div>
         </div>
       </button>
@@ -1478,10 +1485,10 @@ function FloorRow({ floor, index, active, anyActive, onTap }) {
           >
             <div className="mx-auto" style={{
               width: widthPct + "%",
-              borderLeft: "1.5px solid #C44715",
-              borderRight: "1.5px solid #C44715",
-              borderBottom: "1.5px solid #C44715",
-              background: "#FFFCF8",
+              borderLeft: "1.5px solid var(--vibrant-text)",
+              borderRight: "1.5px solid var(--vibrant-text)",
+              borderBottom: "1.5px solid var(--vibrant-text)",
+              background: "var(--panel-warm)",
             }}>
               <div className="grid sm:grid-cols-[1fr_180px] gap-5 p-5">
                 <div>
@@ -1496,7 +1503,7 @@ function FloorRow({ floor, index, active, anyActive, onTap }) {
                       {floor.sessions.map((s, i) => (
                         <li key={i} style={{
                           fontFamily: "Inter, sans-serif", fontWeight: 400, fontSize: 13,
-                          color: "#4A4A4A", padding: "4px 0",
+                          color: "var(--charcoal)", padding: "4px 0",
                           borderBottom: i < floor.sessions.length - 1 ? "0.5px solid #EEE" : "none",
                         }}>{s}</li>
                       ))}
@@ -1515,24 +1522,40 @@ function FloorRow({ floor, index, active, anyActive, onTap }) {
 
 /* Floor media — renders the photo if present at the path, otherwise an
    elegant hairline placeholder noting where the asset goes. */
+/* Floor media — accepts a string OR an array of paths. Renders each in turn
+   (stacked). Videos honour prefers-reduced-motion (poster shown instead of
+   autoplay) and support tap-to-toggle play/pause for WCAG 2.2.2 Pause-Stop-Hide. */
 function FloorMedia({ src, alt }) {
-  const [errored, setErrored] = useState(false);
-  const showPlaceholder = !src || errored;
+  const items = Array.isArray(src) ? src : [src];
+  return (
+    <div className="grid gap-2" style={{ gridTemplateColumns: "1fr" }}>
+      {items.map((s, i) => (
+        <FloorMediaItem key={i} src={s} alt={items.length > 1 ? `${alt} (${i + 1} of ${items.length})` : alt} />
+      ))}
+    </div>
+  );
+}
 
-  if (showPlaceholder) {
+function FloorMediaItem({ src, alt }) {
+  const [errored, setErrored] = useState(false);
+  const reduceMotion = useReducedMotion();
+  const videoRef = useRef(null);
+  const [paused, setPaused] = useState(false);
+
+  if (!src || errored) {
     return (
       <div className="flex flex-col items-center justify-center text-center" style={{
-        background: "#FAFAFA", border: "0.5px dashed #D6D6D6",
+        background: "var(--panel)", border: "0.5px dashed var(--mist)",
         minHeight: 120, padding: "16px 12px",
       }}>
         <div style={{
           fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic",
-          fontSize: 13, color: "#8A8A8A", marginBottom: 6,
+          fontSize: 13, color: "var(--mute-decor)", marginBottom: 6,
         }}>
           photo coming
         </div>
         <div style={{
-          fontFamily: "Inter, sans-serif", fontSize: 10, color: "#8A8A8A",
+          fontFamily: "Inter, sans-serif", fontSize: 10, color: "var(--mute-decor)",
           letterSpacing: "0.08em",
         }}>
           {src || "—"}
@@ -1540,9 +1563,66 @@ function FloorMedia({ src, alt }) {
       </div>
     );
   }
+
+  const isVideo = /\.(mp4|webm|mov)$/i.test(src);
+  const poster  = isVideo ? src.replace(/\.(mp4|webm|mov)$/i, ".jpg") : null;
+
+  // Reduce-motion users: render the poster image instead of the autoplay video.
+  if (isVideo && reduceMotion) {
+    return (
+      <img src={poster} alt={alt}
+        onError={() => setErrored(true)}
+        loading="lazy"
+        style={{ width: "100%", height: "100%", objectFit: "cover", minHeight: 120, maxHeight: 240 }} />
+    );
+  }
+
+  if (isVideo) {
+    const togglePlay = () => {
+      const v = videoRef.current;
+      if (!v) return;
+      if (v.paused) { v.play(); setPaused(false); }
+      else { v.pause(); setPaused(true); }
+    };
+    return (
+      <button type="button" onClick={togglePlay}
+        aria-label={paused ? `Play ${alt} video` : `Pause ${alt} video`}
+        aria-pressed={!paused}
+        style={{
+          position: "relative", display: "block", width: "100%", padding: 0, border: "none",
+          background: "var(--ink)", cursor: "pointer", minHeight: 120,
+        }}>
+        <video
+          ref={videoRef}
+          src={src}
+          poster={poster}
+          autoPlay muted loop playsInline preload="metadata"
+          aria-hidden="true"
+          onError={() => setErrored(true)}
+          style={{
+            width: "100%", height: "100%", objectFit: "cover",
+            minHeight: 120, maxHeight: 240, display: "block",
+          }}
+        />
+        {paused && (
+          <div aria-hidden="true" style={{
+            position: "absolute", inset: 0, display: "flex",
+            alignItems: "center", justifyContent: "center",
+            background: "rgba(0,0,0,0.35)",
+          }}>
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="var(--paper)">
+              <path d="M 6 4 L 20 12 L 6 20 Z" />
+            </svg>
+          </div>
+        )}
+      </button>
+    );
+  }
+
   return (
     <img src={src} alt={alt}
       onError={() => setErrored(true)}
+      loading="lazy"
       style={{ width: "100%", height: "100%", objectFit: "cover", minHeight: 120, maxHeight: 200 }} />
   );
 }
@@ -1566,7 +1646,7 @@ function BoardingPassPhase({ participant, onReset }) {
           fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 500,
           fontSize: "clamp(32px, 5.5vw, 48px)", lineHeight: 1.1, letterSpacing: "-0.005em", color: "#000",
         }}>
-          Itinerary for <em style={{ fontStyle: "italic", color: "#E85D1F", fontWeight: 400 }}>{firstName}</em>
+          Itinerary for <em style={{ fontStyle: "italic", color: "var(--vibrant)", fontWeight: 400 }}>{firstName}</em>
         </h2>
       </motion.div>
 
@@ -1585,7 +1665,7 @@ function BoardingPassPhase({ participant, onReset }) {
           className="relative bg-white flex flex-col md:flex-row"
           style={{
             borderRadius: 18,
-            border: "1px solid #E0E0E0",
+            border: "1px solid var(--rule)",
             boxShadow: "0 24px 60px -28px rgba(0,0,0,0.35), 0 6px 20px -6px rgba(0,0,0,0.12)",
             overflow: "hidden",
           }}
@@ -1596,7 +1676,7 @@ function BoardingPassPhase({ participant, onReset }) {
           {/* MAIN PANEL */}
           <div className="relative flex-1 p-6 sm:p-8" style={{ minWidth: 0 }}>
             {/* top accent line */}
-            <div style={{ position: "absolute", inset: "0 0 auto 0", height: 4, background: "#E85D1F" }} />
+            <div style={{ position: "absolute", inset: "0 0 auto 0", height: 4, background: "var(--vibrant)" }} />
 
             {/* Header row */}
             <div className="flex items-start justify-between mb-7 pt-2">
@@ -1604,7 +1684,7 @@ function BoardingPassPhase({ participant, onReset }) {
                 <InfinityMark className="w-9 h-5" />
                 <div>
                   <Eyebrow color="#000">GIDF<Bindu />flight 26</Eyebrow>
-                  <div className="mt-0.5" style={{ fontSize: 11, color: "#6B6B6B", fontFamily: "Inter, sans-serif" }}>
+                  <div className="mt-0.5" style={{ fontSize: 11, color: "var(--mute)", fontFamily: "Inter, sans-serif" }}>
                     Gent India Dans Festival<Bindu />Shoonya, Ghent
                   </div>
                 </div>
@@ -1613,7 +1693,7 @@ function BoardingPassPhase({ participant, onReset }) {
                 <Eyebrow color="#8A8A8A">Class</Eyebrow>
                 <div style={{
                   fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 500,
-                  fontSize: 18, color: "#C44715", letterSpacing: "-0.005em", marginTop: 2,
+                  fontSize: 18, color: "var(--vibrant-text)", letterSpacing: "-0.005em", marginTop: 2,
                 }}>
                   <em style={{ fontStyle: "italic", fontWeight: 400 }}>
                     {participant.pass.replace(" Pass", "")}
@@ -1637,7 +1717,7 @@ function BoardingPassPhase({ participant, onReset }) {
                   <span style={{
                     fontSize: 10, letterSpacing: "0.18em", textTransform: "uppercase",
                     fontFamily: "Inter, sans-serif", fontWeight: 500,
-                    color: "#000", background: "#FBC70F", padding: "3px 7px",
+                    color: "#000", background: "var(--goldenrod)", padding: "3px 7px",
                   }}>
                     ABC dancer
                   </span>
@@ -1647,7 +1727,7 @@ function BoardingPassPhase({ participant, onReset }) {
                     fontSize: 10, letterSpacing: "0.18em", textTransform: "uppercase",
                     fontFamily: "Inter, sans-serif", fontWeight: 500,
                     /* AA-compliant: white-on-#C44715 = 4.55:1 at 10px */
-                    color: "#fff", background: "#C44715", padding: "3px 7px",
+                    color: "var(--paper)", background: "var(--vibrant-text)", padding: "3px 7px",
                   }}>
                     On stage · {itinerary.opPerformer.block} block
                   </span>
@@ -1666,34 +1746,34 @@ function BoardingPassPhase({ participant, onReset }) {
                 }}>
                   {fromCode}
                 </div>
-                <div className="mt-1" style={{ fontSize: 12, color: "#4A4A4A" }}>
+                <div className="mt-1" style={{ fontSize: 12, color: "var(--charcoal)" }}>
                   {origin.country}
                 </div>
               </div>
 
               <div className="flex items-center gap-2 text-[#E85D1F]">
-                <div style={{ width: 36, borderTop: "1px dashed #E85D1F" }} />
+                <div style={{ width: 36, borderTop: "1px dashed var(--vibrant)" }} />
                 <PlaneIcon size={18} />
-                <div style={{ width: 36, borderTop: "1px dashed #E85D1F" }} />
+                <div style={{ width: 36, borderTop: "1px dashed var(--vibrant)" }} />
               </div>
 
               <div className="text-right">
                 <Eyebrow color="#8A8A8A">To</Eyebrow>
                 <div className="mt-1.5 tabular-nums" style={{
                   fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 500,
-                  fontSize: "clamp(28px, 5vw, 40px)", lineHeight: 1, color: "#E85D1F",
+                  fontSize: "clamp(28px, 5vw, 40px)", lineHeight: 1, color: "var(--vibrant)",
                   letterSpacing: "-0.01em",
                 }}>
                   <em style={{ fontStyle: "italic", fontWeight: 400 }}>GNT</em>
                 </div>
-                <div className="mt-1" style={{ fontSize: 12, color: "#4A4A4A" }}>
+                <div className="mt-1" style={{ fontSize: 12, color: "var(--charcoal)" }}>
                   Ghent · Belgium
                 </div>
               </div>
             </div>
 
             {/* Date / Gate / Seat / Add-on */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-4 pt-5" style={{ borderTop: "0.5px solid #D6D6D6" }}>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-4 pt-5" style={{ borderTop: "0.5px solid var(--mist)" }}>
               <DataBlock label="Dates" value="1 — 3 May" sub="2026" />
               <DataBlock label="Gate" value="Shoonya" sub="Stapelplein 41" />
               <DataBlock label="Seat" value={`#${participant.id}`} sub="Pass ID" />
@@ -1710,7 +1790,7 @@ function BoardingPassPhase({ participant, onReset }) {
             {/* TIMELINE */}
             <div className="mt-10">
               <div className="flex items-baseline justify-between pb-3 mb-5 flex-wrap gap-3"
-                style={{ borderBottom: "0.5px solid #D6D6D6" }}>
+                style={{ borderBottom: "0.5px solid var(--mist)" }}>
                 <h3 style={{
                   fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 500,
                   fontSize: "clamp(20px, 3vw, 26px)", lineHeight: 1.15, color: "#000", margin: 0,
@@ -1719,7 +1799,7 @@ function BoardingPassPhase({ participant, onReset }) {
                 </h3>
                 <span style={{
                   fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontWeight: 400,
-                  fontSize: 14, color: "#C44715",
+                  fontSize: 14, color: "var(--vibrant-text)",
                 }}>
                   connecting flights, in order
                 </span>
@@ -1728,7 +1808,7 @@ function BoardingPassPhase({ participant, onReset }) {
               {itinerary.items.length === 0 ? (
                 <p style={{
                   fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic",
-                  fontSize: 16, color: "#4A4A4A", lineHeight: 1.5,
+                  fontSize: 16, color: "var(--charcoal)", lineHeight: 1.5,
                 }}>
                   Your selection is being curated — find us at the welcome desk on arrival.
                 </p>
@@ -1764,7 +1844,7 @@ function BoardingPassPhase({ participant, onReset }) {
             background: "none", border: "none",
             cursor: "pointer",
             display: "inline-flex", alignItems: "center", gap: 6,
-            borderBottom: "0.5px solid #000",
+            borderBottom: "0.5px solid var(--ink)",
         }}>
           <span aria-hidden="true">←</span>
           Step back to the gate
@@ -1799,7 +1879,7 @@ function PassRibbon({ pass }) {
         width: 220,
         transform: "rotate(45deg)",
         background: color,
-        color: "#fff",
+        color: "var(--paper)",
         padding: "9px 0",
         fontFamily: "Inter, sans-serif",
         fontWeight: 500,
@@ -1849,7 +1929,7 @@ function DataBlock({ label, value, sub, accent }) {
       }}>
         {accent ? <em style={{ fontStyle: "italic", fontWeight: 400 }}>{value}</em> : value}
       </div>
-      <div style={{ fontSize: 11, color: "#6B6B6B", marginTop: 2 }}>{sub}</div>
+      <div style={{ fontSize: 11, color: "var(--mute)", marginTop: 2 }}>{sub}</div>
     </div>
   );
 }
@@ -1857,7 +1937,7 @@ function DataBlock({ label, value, sub, accent }) {
 /* PASS STUB — perforation, punch holes, QR + barcode */
 function PassStub({ participant, fromCode }) {
   return (
-    <div className="relative md:w-[230px] flex-shrink-0" style={{ background: "#FAFAFA" }}>
+    <div className="relative md:w-[230px] flex-shrink-0" style={{ background: "var(--panel)" }}>
       {/* Vertical perforation — desktop */}
       <div className="hidden md:block absolute top-0 bottom-0 left-0" style={{ width: 1 }}>
         <div className="absolute inset-0" style={{
@@ -1867,13 +1947,13 @@ function PassStub({ participant, fromCode }) {
       </div>
       {/* Punch hole — top */}
       <div className="hidden md:block absolute" style={{
-        top: -10, left: -10, width: 20, height: 20, borderRadius: "50%", background: "#fff",
-        border: "1px solid #E0E0E0",
+        top: -10, left: -10, width: 20, height: 20, borderRadius: "50%", background: "var(--paper)",
+        border: "1px solid var(--rule)",
       }} />
       {/* Punch hole — bottom */}
       <div className="hidden md:block absolute" style={{
-        bottom: -10, left: -10, width: 20, height: 20, borderRadius: "50%", background: "#fff",
-        border: "1px solid #E0E0E0",
+        bottom: -10, left: -10, width: 20, height: 20, borderRadius: "50%", background: "var(--paper)",
+        border: "1px solid var(--rule)",
       }} />
 
       {/* Mobile horizontal perforation */}
@@ -1903,7 +1983,7 @@ function PassStub({ participant, fromCode }) {
             }}>
               {participant.name}
             </div>
-            <div style={{ fontSize: 11, color: "#6B6B6B", marginTop: 4 }}>
+            <div style={{ fontSize: 11, color: "var(--mute)", marginTop: 4 }}>
               #{participant.id}
             </div>
           </div>
@@ -1924,7 +2004,7 @@ function PassStub({ participant, fromCode }) {
           <div className="mt-3">
             <Barcode />
           </div>
-          <div className="mt-3 flex items-center justify-between" style={{ fontSize: 10, color: "#6B6B6B" }}>
+          <div className="mt-3 flex items-center justify-between" style={{ fontSize: 10, color: "var(--mute)" }}>
             <span style={{ fontFamily: "Inter, sans-serif", letterSpacing: "0.12em", textTransform: "uppercase" }}>
               GIDF · 26
             </span>
@@ -1966,12 +2046,12 @@ function QRBlock({ value }) {
   }
   return (
     <div style={{
-      width: 88, height: 88, margin: "0 auto", padding: 6, background: "#fff",
-      border: "0.5px solid #D6D6D6",
+      width: 88, height: 88, margin: "0 auto", padding: 6, background: "var(--paper)",
+      border: "0.5px solid var(--mist)",
     }}>
       <div style={{ display: "grid", gridTemplateColumns: `repeat(${N}, 1fr)`, gap: 1, width: "100%", height: "100%" }}>
         {cells.map((c, i) => (
-          <div key={i} style={{ background: c.filled ? "#000" : "#fff" }} />
+          <div key={i} style={{ background: c.filled ? "#000" : "var(--paper)" }} />
         ))}
       </div>
     </div>
@@ -2005,7 +2085,7 @@ function Timeline({ items }) {
                 className="flex items-center gap-3 my-3"
               >
                 <Eyebrow color="#E85D1F">{w.day}</Eyebrow>
-                <div className="flex-1" style={{ height: "0.5px", background: "#D6D6D6" }} />
+                <div className="flex-1" style={{ height: "0.5px", background: "var(--mist)" }} />
               </motion.div>
             )}
             <TimelineNode w={w} delay={0.5 + i * 0.07} isLast={i === items.length - 1} isFirstOfDay={isNewDay} />
@@ -2021,7 +2101,7 @@ function TimelineNode({ w, delay, isLast, isFirstOfDay }) {
   const isOP = w.id === "openingParty";
   const isABCBonus = w.isABCBonus;
   /* Use AA-darkened saffron for the small text/timestamp; goldenrod for ABC bonus */
-  const accent = isABCBonus ? "#A6810A" : "#C44715";
+  const accent = isABCBonus ? "#A6810A" : "var(--vibrant-text)";
   const panelId = `tl-panel-${w.id}-${delay.toString().replace(".", "_")}`;
 
   return (
@@ -2037,7 +2117,7 @@ function TimelineNode({ w, delay, isLast, isFirstOfDay }) {
         {!isLast && (
           <div className="absolute" style={{
             left: 9, top: 14, bottom: -14, width: "1px",
-            background: isFirstOfDay ? "transparent" : "#D6D6D6",
+            background: isFirstOfDay ? "transparent" : "var(--mist)",
             backgroundImage: isFirstOfDay
               ? "repeating-linear-gradient(180deg, #D6D6D6 0 4px, transparent 4px 8px)"
               : "none",
@@ -2046,7 +2126,7 @@ function TimelineNode({ w, delay, isLast, isFirstOfDay }) {
         {/* node dot */}
         <div className="absolute" style={{
           top: 4, left: 5, width: 10, height: 10, borderRadius: "50%",
-          background: isOP || isABCBonus ? accent : "#fff",
+          background: isOP || isABCBonus ? accent : "var(--paper)",
           border: `1.5px solid ${accent}`,
         }} />
       </div>
@@ -2077,32 +2157,32 @@ function TimelineNode({ w, delay, isLast, isFirstOfDay }) {
               <span style={{
                 fontSize: 9, letterSpacing: "0.18em", textTransform: "uppercase",
                 fontFamily: "Inter, sans-serif", fontWeight: 500, color: "#000",
-                background: "#FBC70F", padding: "2px 5px",
+                background: "var(--goldenrod)", padding: "2px 5px",
               }}>ABC bonus</span>
             )}
             {isOP && (
               <span style={{
                 fontSize: 9, letterSpacing: "0.18em", textTransform: "uppercase",
-                fontFamily: "Inter, sans-serif", fontWeight: 500, color: "#E85D1F",
-                border: "0.5px solid #E85D1F", padding: "2px 5px",
+                fontFamily: "Inter, sans-serif", fontWeight: 500, color: "var(--vibrant)",
+                border: "0.5px solid var(--vibrant)", padding: "2px 5px",
               }}>Event</span>
             )}
           </div>
-          <Chevron className="w-4 h-4" style={{ color: "#6B6B6B" }} rotate={open} />
+          <Chevron className="w-4 h-4" style={{ color: "var(--mute)" }} rotate={open} />
         </div>
-        <div className="mt-0.5" style={{ fontSize: 12, color: "#4A4A4A" }}>
+        <div className="mt-0.5" style={{ fontSize: 12, color: "var(--charcoal)" }}>
           <em style={{ fontStyle: "italic", fontFamily: "'Playfair Display', Georgia, serif", color: "#000", fontSize: 12.5 }}>
             {w.teacher}
           </em>
           <Bindu />
-          {w.studio}<Bindu /><span style={{ color: "#6B6B6B" }}>{w.floor}</span>
+          {w.studio}<Bindu /><span style={{ color: "var(--mute)" }}>{w.floor}</span>
         </div>
         {w.performerSlot && (
           <div className="mt-1.5 inline-flex items-center gap-2"
-            style={{ borderLeft: "1px solid #E85D1F", paddingLeft: 10 }}>
+            style={{ borderLeft: "1px solid var(--vibrant)", paddingLeft: 10 }}>
             <span style={{
               fontFamily: "Inter, sans-serif", fontWeight: 500, fontSize: 10,
-              letterSpacing: "0.18em", textTransform: "uppercase", color: "#C44715",
+              letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--vibrant-text)",
             }}>You're on stage</span>
             <span style={{
               fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 500,
@@ -2110,7 +2190,7 @@ function TimelineNode({ w, delay, isLast, isFirstOfDay }) {
             }}>
               {w.performerSlot} block
               {w.performerWith && (
-                <em style={{ fontStyle: "italic", color: "#4A4A4A", fontWeight: 400 }}>
+                <em style={{ fontStyle: "italic", color: "var(--charcoal)", fontWeight: 400 }}>
                   {" "}· with {w.performerWith}
                 </em>
               )}
@@ -2121,10 +2201,10 @@ function TimelineNode({ w, delay, isLast, isFirstOfDay }) {
         {/* Workshop-specific notice (e.g. Tech Lab — bring a packed lunch). */}
         {w.notice && (
           <div className="mt-2 flex items-start gap-2"
-            style={{ borderLeft: "1.5px solid #C44715", paddingLeft: 10, paddingTop: 2, paddingBottom: 2 }}>
+            style={{ borderLeft: "1.5px solid var(--vibrant-text)", paddingLeft: 10, paddingTop: 2, paddingBottom: 2 }}>
             <span style={{
               fontFamily: "Inter, sans-serif", fontWeight: 500, fontSize: 10,
-              letterSpacing: "0.18em", textTransform: "uppercase", color: "#C44715",
+              letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--vibrant-text)",
               flexShrink: 0, paddingTop: 1,
             }}>
               Heads up
@@ -2150,12 +2230,12 @@ function TimelineNode({ w, delay, isLast, isFirstOfDay }) {
               style={{ overflow: "hidden" }}
             >
               <div className="grid sm:grid-cols-[1fr_auto] gap-5 mt-3 pt-3"
-                style={{ borderTop: "0.5px dashed #E0E0E0" }}>
+                style={{ borderTop: "0.5px dashed var(--rule)" }}>
                 <div>
                   {w.subtitle && (
                     <div className="mb-1.5" style={{
                       fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic",
-                      fontSize: 14, color: "#4A4A4A",
+                      fontSize: 14, color: "var(--charcoal)",
                     }}>{w.subtitle}</div>
                   )}
                   <p style={{
@@ -2208,14 +2288,14 @@ const CONDITIONS = [
 
 function FlightConditions() {
   return (
-    <div style={{ border: "1px solid #E0E0E0", borderRadius: 18 }}>
+    <div style={{ border: "1px solid var(--rule)", borderRadius: 18 }}>
       <div className="p-6 sm:p-8">
         <div className="flex items-baseline justify-between flex-wrap gap-3 pb-4"
-          style={{ borderBottom: "0.5px solid #D6D6D6" }}>
+          style={{ borderBottom: "0.5px solid var(--mist)" }}>
           <Eyebrow>Flight conditions</Eyebrow>
           <span style={{
             fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontWeight: 400,
-            fontSize: 14, color: "#C44715",
+            fontSize: 14, color: "var(--vibrant-text)",
           }}>
             passenger information<Bindu />read once before take-off
           </span>
@@ -2225,7 +2305,7 @@ function FlightConditions() {
             <div key={c.code} className="grid grid-cols-[44px_1fr] gap-3">
               <div className="tabular-nums pt-0.5" style={{
                 fontFamily: "Inter, sans-serif", fontWeight: 500, fontSize: 10,
-                letterSpacing: "0.18em", color: "#C44715",
+                letterSpacing: "0.18em", color: "var(--vibrant-text)",
               }}>
                 {c.code}
               </div>
@@ -2238,7 +2318,7 @@ function FlightConditions() {
                 </div>
                 <p className="mt-1" style={{
                   fontFamily: "Inter, sans-serif", fontWeight: 400,
-                  fontSize: 13, lineHeight: 1.6, color: "#4A4A4A", margin: 0,
+                  fontSize: 13, lineHeight: 1.6, color: "var(--charcoal)", margin: 0,
                 }}>
                   {c.body}
                 </p>
@@ -2246,10 +2326,10 @@ function FlightConditions() {
             </div>
           ))}
         </div>
-        <div className="mt-6 pt-4" style={{ borderTop: "0.5px solid #D6D6D6", textAlign: "right" }}>
+        <div className="mt-6 pt-4" style={{ borderTop: "0.5px solid var(--mist)", textAlign: "right" }}>
           <span style={{
             fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontWeight: 400,
-            fontSize: 14, color: "#4A4A4A",
+            fontSize: 14, color: "var(--charcoal)",
           }}>
             With warmth, Swapnil & Wim<Bindu />ABC
           </span>
@@ -2265,22 +2345,22 @@ function FlightConditions() {
 function HeadsUp({ itinerary }) {
   return (
     <div className="px-6 sm:px-8 py-9 sm:py-10" style={{
-      background: "#000", borderTop: "1px solid #E85D1F", borderRadius: 18,
+      background: "#000", borderTop: "1px solid var(--vibrant)", borderRadius: 18,
     }}>
       <Eyebrow color="#E85D1F">Heads up</Eyebrow>
       <h3 className="mt-3" style={{
         maxWidth: "26ch",
         fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 500,
-        fontSize: "clamp(22px, 3.5vw, 30px)", lineHeight: 1.1, color: "#fff",
+        fontSize: "clamp(22px, 3.5vw, 30px)", lineHeight: 1.1, color: "var(--paper)",
         letterSpacing: "-0.005em", margin: 0,
       }}>
         {itinerary.hasTechLabCallout ? (
           <>Two festival moments are{" "}
-          <em style={{ fontStyle: "italic", color: "#E85D1F", fontWeight: 400 }}>separate tickets</em>{" "}
+          <em style={{ fontStyle: "italic", color: "var(--vibrant)", fontWeight: 400 }}>separate tickets</em>{" "}
           — they aren't included in your pass.</>
         ) : (
           <>One festival moment is a{" "}
-          <em style={{ fontStyle: "italic", color: "#E85D1F", fontWeight: 400 }}>separate ticket</em>{" "}
+          <em style={{ fontStyle: "italic", color: "var(--vibrant)", fontWeight: 400 }}>separate ticket</em>{" "}
           — and it's already sold out.</>
         )}
       </h3>
@@ -2301,7 +2381,7 @@ function HeadsUp({ itinerary }) {
       </div>
       <div className="mt-8" style={{
         fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontWeight: 400,
-        fontSize: 14, color: "#D6D6D6", lineHeight: 1.5,
+        fontSize: 14, color: "var(--mist)", lineHeight: 1.5,
       }}>
         Reply to your registration email if anything's unclear — we'll sort it before you arrive.
       </div>
@@ -2314,9 +2394,9 @@ function SeparateRow({ name, sub, metaParts, stat, soldout }) {
     <div className="py-5 sm:py-6 sm:pr-6" style={{ borderBottom: "0.5px solid #2A2A2A" }}>
       <div style={{
         fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 500,
-        fontSize: 20, lineHeight: 1.15, color: "#fff", letterSpacing: "-0.005em", margin: 0,
+        fontSize: 20, lineHeight: 1.15, color: "var(--paper)", letterSpacing: "-0.005em", margin: 0,
       }}>{name}</div>
-      <div className="mt-1" style={{ fontSize: 13, color: "#D6D6D6" }}>{sub}</div>
+      <div className="mt-1" style={{ fontSize: 13, color: "var(--mist)" }}>{sub}</div>
       <div className="mt-2" style={{ fontSize: 12, color: "#9A9A9A", fontVariantNumeric: "tabular-nums" }}>
         {metaParts.map((part, i) => (
           <Fragment key={i}>{i > 0 && <Bindu />}{part}</Fragment>
@@ -2325,7 +2405,7 @@ function SeparateRow({ name, sub, metaParts, stat, soldout }) {
       <div className="mt-3" style={{
         fontFamily: "Inter, sans-serif", fontWeight: 500, fontSize: 11,
         letterSpacing: "0.18em", textTransform: "uppercase",
-        color: soldout ? "#fff" : "#E85D1F",
+        color: soldout ? "#fff" : "var(--vibrant)",
       }}>
         {stat}
       </div>
