@@ -996,21 +996,6 @@ function TransitPhase({ participant, onSkip }) {
         <TransitArc origin={origin} />
       </div>
 
-      {/* Airport pair — tight against the arc */}
-      <motion.div {...fadeUp(0.7)} className="mt-2 flex items-center gap-6 sm:gap-10">
-        <AirportBadge code={airportCode(origin.code)} label={origin.country} />
-        <Bindu />
-        <AirportBadge code="GNT" label="Ghent · BE" highlight />
-      </motion.div>
-
-      {/* Walking step — tucked just below */}
-      <motion.div
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-        transition={{ duration: 0.8, delay: 4.5, ease: EASE }}
-        className="mt-3 w-full max-w-sm">
-        <WalkToShoonya />
-      </motion.div>
-
       {onSkip && <SkipControl onSkip={onSkip} label="Skip" color="#6B6B6B" delay={1.2} />}
     </section>
   );
@@ -1077,11 +1062,6 @@ function TransitArc({ origin }) {
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.7, duration: 0.5 }}>
         {origin.country.toUpperCase()}
       </motion.text>
-
-      {/* Konark sun — clear in the sky above the city, only its lower edge
-          dipping behind the Belfort. Reads as a sun rising over Ghent.
-          India as atmosphere, not a stop.                                  */}
-      <KonarkSun cx={620} cy={82} r={72} delay={1.0} opacity={0.55} duration={95} />
 
       {/* Ghent skyline at destination */}
       <motion.g initial={{ opacity: 0 }} animate={{ opacity: 1 }}
