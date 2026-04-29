@@ -421,6 +421,7 @@ function computeItinerary(participant) {
       ...OPENING_PARTY,
       performerSlot: opSlot ? opSlot.block : null,
       performerWith: opSlot && !opSlot.solo ? (opSlot.with || null) : null,
+      opGuestCount: participant.opGuestCount || 0,
     });
   }
 
@@ -439,16 +440,19 @@ function computeItinerary(participant) {
   });
 
   // OP-only and Gala Audience pass types skip the Tech Lab callout
-  // (they can't book it). Gala-separate-ticket callout: shown to anyone
-  // who has galaTickets > 0 (regardless of pass), suppressed for OP-only
-  // (their pass is the party, not a workshop journey) — but kept for
-  // Gala Audience so even gala-only buyers see the "your ticket is
-  // confirmed" reassurance.
+  // (they can't book it).
+  // Gala callout logic:
+  //   - Suppress entirely for Gala Audience (gala IS in their itinerary,
+  //     no need for a "by the way" callout)
+  //   - Show for anyone with galaTickets > 0 — including OP-only attendees
+  //     like Brenda (12 gala tickets) and Dylan / Pascale (1 each)
+  //   - Show for workshop pass holders even without gala (sales pitch /
+  //     sold-out reminder, original behaviour)
   const isOPOnly = participant.pass === "Opening Party Only";
   const galaTickets = participant.galaTickets || 0;
   return {
     items,
-    hasGalaCallout: !isOPOnly && (galaTickets > 0 || !isGalaAudience),
+    hasGalaCallout: !isGalaAudience && (galaTickets > 0 || !isOPOnly),
     hasTechLabCallout: !participant.isABC && !isOPOnly && !isGalaAudience,
     opPerformer: opSlot,
   };
@@ -2889,6 +2893,24 @@ function TimelineNode({ w, delay, isLast, isFirstOfDay }) {
                   {" "}· with {w.performerWith}
                 </em>
               )}
+            </span>
+          </div>
+        )}
+        {/* OP guest count — for pass holders who bought extra OP tickets
+            (e.g. Amy Symynck: Friday Pass + 2 extra OP guests). Renders only
+            on the Opening Party item. Welcome desk admits the +N at the door. */}
+        {w.id === "openingParty" && w.opGuestCount > 0 && (
+          <div className="mt-1.5 inline-flex items-center gap-2"
+            style={{ borderLeft: "1px solid var(--vibrant)", paddingLeft: 10 }}>
+            <span style={{
+              fontFamily: "Inter, sans-serif", fontWeight: 500, fontSize: 10,
+              letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--vibrant-text)",
+            }}>+ guests joining</span>
+            <span style={{
+              fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 500,
+              fontSize: 13, color: "#000", fontVariantNumeric: "tabular-nums",
+            }}>
+              {w.opGuestCount} {w.opGuestCount === 1 ? "guest" : "guests"} on your ticket
             </span>
           </div>
         )}
