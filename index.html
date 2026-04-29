@@ -936,48 +936,58 @@ const Landmark = ({ code, color = "#E85D1F", height = 110 }) => {
 
   if (code === "IN-MAA") return (
     /* Kapaleeshwarar Temple gopuram — Mylapore, Chennai. South Indian
-       temple tower: stepped pyramidal silhouette tapering toward the top,
-       crowned with a row of kalashas (gold finial pots). */
+       temple tower: stepped pyramidal silhouette, prominent central
+       entrance arch, ridge of 5 kalashas (gold finial pots), small
+       carved-figure niches on lower tiers. Symmetric on x=110. */
     <svg viewBox="0 0 220 200" style={{ height, width: "auto" }} {...common}>
       {/* ground + base platform */}
       <path d="M 5 196 L 215 196" strokeWidth={sw * 0.5} opacity="0.4" />
       <path d="M 26 188 L 194 188 L 194 178 L 26 178 Z" />
-      {/* tier 1 (lowest, widest) — with a central entrance arch */}
-      <path d="M 30 178 L 30 142 L 190 142 L 190 178" />
-      <path d="M 30 146 L 190 146" />
-      <path d="M 100 178 L 100 158 Q 100 148 110 148 Q 120 148 120 158 L 120 178" />
+      {/* tier 1 (lowest, widest) — with a tall, prominent central arch
+         (a real gopuram is recognised by its imposing entrance) */}
+      <path d="M 30 178 L 30 144 L 190 144 L 190 178" />
+      <path d="M 30 148 L 190 148" />
+      <path d="M 92 178 L 92 154 Q 92 138 110 138 Q 128 138 128 154 L 128 178" />
       {/* tier 2 */}
-      <path d="M 38 142 L 38 116 L 182 116 L 182 142" />
-      <path d="M 38 120 L 182 120" />
+      <path d="M 38 144 L 38 120 L 182 120 L 182 144" />
+      <path d="M 38 124 L 182 124" />
       {/* tier 3 */}
-      <path d="M 48 116 L 48 92 L 172 92 L 172 116" />
-      <path d="M 48 96 L 172 96" />
+      <path d="M 48 120 L 48 98 L 172 98 L 172 120" />
+      <path d="M 48 102 L 172 102" />
       {/* tier 4 */}
-      <path d="M 58 92 L 58 70 L 162 70 L 162 92" />
-      <path d="M 58 74 L 162 74" />
+      <path d="M 58 98 L 58 78 L 162 78 L 162 98" />
+      <path d="M 58 82 L 162 82" />
       {/* tier 5 */}
-      <path d="M 70 70 L 70 50 L 150 50 L 150 70" />
-      <path d="M 70 54 L 150 54" />
-      {/* shikhara (top crown — barrel-vault shape) */}
-      <path d="M 82 50 L 82 36 L 138 36 L 138 50" />
-      <path d="M 78 36 Q 110 24 142 36" />
-      <path d="M 78 36 L 142 36" />
-      {/* row of kalashas (finials) along the roof ridge */}
-      <line x1="92" y1="30" x2="92" y2="22" strokeWidth={sw * 0.7} />
-      <circle cx="92" cy="20" r="1.8" fill={color} />
-      <line x1="106" y1="29" x2="106" y2="18" strokeWidth={sw * 0.7} />
-      <circle cx="106" cy="16" r="2.2" fill={color} />
-      <line x1="120" y1="28" x2="120" y2="14" strokeWidth={sw * 0.7} />
-      <circle cx="120" cy="12" r="2.6" fill={color} />
-      <line x1="134" y1="29" x2="134" y2="18" strokeWidth={sw * 0.7} />
-      <circle cx="134" cy="16" r="2.2" fill={color} />
-      <line x1="148" y1="30" x2="148" y2="22" strokeWidth={sw * 0.7} />
-      <circle cx="148" cy="20" r="1.8" fill={color} />
-      {/* small carved-figure suggestions on each tier (hairline rectangles) */}
+      <path d="M 70 78 L 70 58 L 150 58 L 150 78" />
+      <path d="M 70 62 L 150 62" />
+      {/* shikhara (top crown — barrel-vault, centred on x=110) */}
+      <path d="M 82 58 L 82 44 L 138 44 L 138 58" />
+      <path d="M 78 44 Q 110 30 142 44" />
+      <path d="M 78 44 L 142 44" />
+      {/* row of 5 kalashas — centred on x=110, evenly spaced 14 apart.
+         Central kalasha tallest (matches the dome apex). */}
+      <line x1="82"  y1="40" x2="82"  y2="32" strokeWidth={sw * 0.7} />
+      <circle cx="82"  cy="30" r="1.8" fill={color} />
+      <line x1="96"  y1="38" x2="96"  y2="28" strokeWidth={sw * 0.7} />
+      <circle cx="96"  cy="26" r="2.2" fill={color} />
+      <line x1="110" y1="34" x2="110" y2="20" strokeWidth={sw * 0.8} />
+      <circle cx="110" cy="18" r="2.6" fill={color} />
+      <line x1="124" y1="38" x2="124" y2="28" strokeWidth={sw * 0.7} />
+      <circle cx="124" cy="26" r="2.2" fill={color} />
+      <line x1="138" y1="40" x2="138" y2="32" strokeWidth={sw * 0.7} />
+      <circle cx="138" cy="30" r="1.8" fill={color} />
+      {/* carved-figure niches on lower tiers (hairline rectangles, hint of
+         sculpted bands without going into detail) */}
       <g strokeWidth={sw * 0.5} opacity="0.7">
-        <path d="M 44 156 L 48 156 L 48 168 L 44 168 Z M 56 156 L 60 156 L 60 168 L 56 168 Z M 68 156 L 72 156 L 72 168 L 68 168 Z M 148 156 L 152 156 L 152 168 L 148 168 Z M 160 156 L 164 156 L 164 168 L 160 168 Z M 172 156 L 176 156 L 176 168 L 172 168 Z" />
-        <path d="M 52 130 L 56 130 L 56 138 L 52 138 Z M 64 130 L 68 130 L 68 138 L 64 138 Z M 76 130 L 80 130 L 80 138 L 76 138 Z M 140 130 L 144 130 L 144 138 L 140 138 Z M 152 130 L 156 130 L 156 138 L 152 138 Z M 164 130 L 168 130 L 168 138 L 164 138 Z" />
-        <path d="M 60 106 L 64 106 L 64 112 L 60 112 Z M 72 106 L 76 106 L 76 112 L 72 112 Z M 144 106 L 148 106 L 148 112 L 144 112 Z M 156 106 L 160 106 L 160 112 L 156 112 Z" />
+        {/* tier 1 — flanking the entrance */}
+        <path d="M 44 158 L 48 158 L 48 170 L 44 170 Z M 56 158 L 60 158 L 60 170 L 56 170 Z M 68 158 L 72 158 L 72 170 L 68 170 Z M 80 158 L 84 158 L 84 170 L 80 170 Z" />
+        <path d="M 136 158 L 140 158 L 140 170 L 136 170 Z M 148 158 L 152 158 L 152 170 L 148 170 Z M 160 158 L 164 158 L 164 170 L 160 170 Z M 172 158 L 176 158 L 176 170 L 172 170 Z" />
+        {/* tier 2 — symmetric across centre */}
+        <path d="M 50 132 L 54 132 L 54 140 L 50 140 Z M 62 132 L 66 132 L 66 140 L 62 140 Z M 74 132 L 78 132 L 78 140 L 74 140 Z M 86 132 L 90 132 L 90 140 L 86 140 Z M 130 132 L 134 132 L 134 140 L 130 140 Z M 142 132 L 146 132 L 146 140 L 142 140 Z M 154 132 L 158 132 L 158 140 L 154 140 Z M 166 132 L 170 132 L 170 140 L 166 140 Z" />
+        {/* tier 3 — fewer niches as we taper */}
+        <path d="M 58 110 L 62 110 L 62 116 L 58 116 Z M 72 110 L 76 110 L 76 116 L 72 116 Z M 144 110 L 148 110 L 148 116 L 144 116 Z M 158 110 L 162 110 L 162 116 L 158 116 Z" />
+        {/* tier 4 — central pair only */}
+        <path d="M 80 88 L 84 88 L 84 94 L 80 94 Z M 136 88 L 140 88 L 140 94 L 136 94 Z" />
       </g>
     </svg>
   );
@@ -1281,11 +1291,13 @@ function TransitPhase({ participant, onSkip }) {
       </div>
 
       {/* Bottom anchor — quiet venue/date line that grounds the page so the
-          footer doesn't feel empty after the arc completes. Fades in last. */}
+          footer doesn't feel empty after the arc completes. Lifted above
+          the Skip control on mobile (matches the ShoonyaPhase pattern); on
+          sm+ it sits at bottom-8 with Skip clear at bottom-right. */}
       <motion.div
         initial={{ opacity: 0 }} animate={{ opacity: 1 }}
         transition={{ duration: 1.0, delay: 4.6, ease: EASE }}
-        className="absolute bottom-8 left-0 right-0 text-center px-6"
+        className="absolute bottom-24 sm:bottom-8 left-0 right-0 text-center px-24 sm:px-6"
       >
         <Eyebrow color="var(--mute)">1 — 3 May 2026 · Shoonya, Ghent</Eyebrow>
       </motion.div>
@@ -1365,34 +1377,85 @@ function TransitArc({ origin }) {
         {(origin.city || origin.country).toUpperCase()}
       </motion.text>
 
-      {/* Ghent skyline at destination */}
+      {/* Ghent skyline at destination — three-tower silhouette + atmosphere
+          (soft sun, drifting clouds, a couple of birds, a faint canal hint
+          beneath the horizon). Hairline aesthetic preserved. */}
       <motion.g initial={{ opacity: 0 }} animate={{ opacity: 1 }}
         transition={{ duration: 1.6, delay: 1.6, ease: EASE }}>
+        {/* Soft sun behind the spires — fades the towers into a warm halo */}
+        <circle cx="700" cy="135" r="48" fill="#E85D1F" opacity="0.06" />
+        <circle cx="700" cy="135" r="32" fill="#E85D1F" opacity="0.08" />
+        {/* Drifting cloud lines — three soft horizontal strokes */}
+        <g stroke="#E85D1F" fill="none" strokeLinecap="round">
+          <path d="M 460 145 Q 480 142 500 145 Q 515 147 530 144" strokeWidth="0.5" opacity="0.32" />
+          <path d="M 540 95 Q 560 92 585 95 Q 605 98 625 93" strokeWidth="0.5" opacity="0.30" />
+          <path d="M 670 175 Q 690 172 715 175 Q 740 178 765 174" strokeWidth="0.5" opacity="0.30" />
+          <path d="M 760 110 Q 775 108 790 111" strokeWidth="0.4" opacity="0.28" />
+        </g>
+        {/* Birds — small V flock between the towers */}
+        <g stroke="#E85D1F" fill="none" strokeWidth="0.7" strokeLinecap="round" opacity="0.7">
+          <path d="M 560 130 q 3 -2 6 0 q 3 -2 6 0" />
+          <path d="M 575 142 q 2.5 -1.5 5 0 q 2.5 -1.5 5 0" strokeWidth="0.6" />
+          <path d="M 552 158 q 2 -1.2 4 0 q 2 -1.2 4 0" strokeWidth="0.55" opacity="0.55" />
+        </g>
+        {/* Horizon — kept for the ground-line anchor */}
         <line x1="450" y1={HZ} x2="790" y2={HZ} stroke="#E85D1F" strokeWidth="0.5" opacity="0.7" />
-        {/* Saint Bavo */}
+        {/* Faint canal reflection just below the horizon */}
+        <line x1="455" y1={HZ + 6} x2="785" y2={HZ + 6} stroke="#E85D1F" strokeWidth="0.4" opacity="0.25" />
+        <line x1="470" y1={HZ + 11} x2="770" y2={HZ + 11} stroke="#E85D1F" strokeWidth="0.4" opacity="0.18" />
+
+        {/* Saint Bavo Cathedral — square Gothic tower with crenellations,
+            now with a clock face mid-tower and lancet windows. */}
         <g stroke="#E85D1F" strokeWidth="0.8" fill="none" strokeLinecap="round" strokeLinejoin="round">
           <path d={`M 470 ${HZ} L 470 250 L 475 250 L 475 245 L 510 245 L 510 250 L 515 250 L 515 ${HZ} Z`} />
           <path d="M 475 245 L 478 245 L 478 240 L 482 240 L 482 245 L 486 245 L 486 240 L 490 240 L 490 245 L 494 245 L 494 240 L 498 240 L 498 245 L 502 245 L 502 240 L 506 240 L 506 245 L 510 245" />
+          {/* clock face — circle + diagonals */}
+          <circle cx="492.5" cy="278" r="6" strokeWidth="0.6" />
+          <line x1="492.5" y1="273" x2="492.5" y2="278" strokeWidth="0.5" />
+          <line x1="492.5" y1="278" x2="496" y2="278" strokeWidth="0.5" />
+          {/* lancet windows below the clock */}
+          <path d="M 480 305 L 480 295 Q 480 292 483 292 Q 486 292 486 295 L 486 305 Z" strokeWidth="0.5" opacity="0.85" />
+          <path d="M 499 305 L 499 295 Q 499 292 502 292 Q 505 292 505 295 L 505 305 Z" strokeWidth="0.5" opacity="0.85" />
         </g>
-        {/* Belfort */}
+        {/* Belfort — taller central tower, pyramid + spire + dragon weather
+            vane on top, plus a small pennant. Iconic Ghent silhouette. */}
         <g stroke="#E85D1F" strokeWidth="0.8" fill="none" strokeLinecap="round" strokeLinejoin="round">
           <path d={`M 596 ${HZ} L 596 175 L 601 175 L 601 168 L 639 168 L 639 175 L 644 175 L 644 ${HZ} Z`} />
           <path d="M 601 168 L 620 138 L 639 168" />
           <line x1="620" y1="138" x2="620" y2="105" />
-          <path d="M 620 105 L 624 102 L 622 99 L 618 99 L 616 102 L 620 105" />
+          {/* dragon weather vane — stylised, body arched, tail trailing */}
+          <path d="M 614 102 Q 619 98 626 100 L 624 103 L 626 105 Q 622 107 615 105 Z" strokeWidth="0.6" />
+          <path d="M 626 100 L 631 98" strokeWidth="0.5" />
+          {/* pennant just below the dragon */}
+          <path d="M 620 115 L 614 117 L 620 119 Z" strokeWidth="0.5" opacity="0.7" />
           <line x1="601" y1="168" x2="601" y2="161" />
           <line x1="639" y1="168" x2="639" y2="161" />
-          <circle cx="620" cy="220" r="3.5" />
+          {/* clock face on Belfort */}
+          <circle cx="620" cy="220" r="4.5" strokeWidth="0.6" />
+          <line x1="620" y1="216" x2="620" y2="220" strokeWidth="0.5" />
+          <line x1="620" y1="220" x2="623" y2="220" strokeWidth="0.5" />
+          {/* tower windows — narrow lancet pairs */}
+          <path d="M 605 250 L 605 240 Q 605 237 608 237 Q 611 237 611 240 L 611 250 Z" strokeWidth="0.5" opacity="0.85" />
+          <path d="M 629 250 L 629 240 Q 629 237 632 237 Q 635 237 635 240 L 635 250 Z" strokeWidth="0.5" opacity="0.85" />
+          <path d="M 605 285 L 605 275 Q 605 272 608 272 Q 611 272 611 275 L 611 285 Z" strokeWidth="0.5" opacity="0.7" />
+          <path d="M 629 285 L 629 275 Q 629 272 632 272 Q 635 272 635 275 L 635 285 Z" strokeWidth="0.5" opacity="0.7" />
         </g>
-        {/* Saint Nicholas */}
+        {/* Saint Nicholas Church — central lantern tower flanked by lower
+            transept arms, with a small spire on the central peak. */}
         <g stroke="#E85D1F" strokeWidth="0.8" fill="none" strokeLinecap="round" strokeLinejoin="round">
           <path d={`M 700 ${HZ} L 700 195 L 705 195 L 705 189 L 735 189 L 735 195 L 740 195 L 740 ${HZ} Z`} />
           <path d="M 705 189 L 720 158 L 735 189" />
           <line x1="720" y1="158" x2="720" y2="148" />
+          <circle cx="720" cy="146" r="1.4" fill="#E85D1F" strokeWidth="0" />
           <path d={`M 680 ${HZ} L 680 230 L 700 230`} />
           <path d="M 680 230 L 690 215 L 700 230" />
           <path d={`M 760 ${HZ} L 760 230 L 740 230`} />
           <path d="M 740 230 L 750 215 L 760 230" />
+          {/* central rose-window hint */}
+          <circle cx="720" cy="225" r="3.5" strokeWidth="0.5" opacity="0.7" />
+          {/* nave windows */}
+          <path d="M 712 280 L 712 270 Q 712 267 715 267 Q 718 267 718 270 L 718 280 Z" strokeWidth="0.5" opacity="0.8" />
+          <path d="M 722 280 L 722 270 Q 722 267 725 267 Q 728 267 728 270 L 728 280 Z" strokeWidth="0.5" opacity="0.8" />
         </g>
       </motion.g>
 
