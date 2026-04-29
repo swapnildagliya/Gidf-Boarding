@@ -80,6 +80,57 @@
   @media (prefers-reduced-motion: reduce) {
     * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
   }
+
+  /* Tour phase — vertical 9:16 video.
+     Mobile: full-bleed (edge to edge, sharp corners — matches v1 design).
+     Desktop: phone-bezel (max 320px wide, thin dark frame, subtle radius).
+     Intentional v1 break on desktop only — the bezel reads as "Reel/Story",
+     borrowed from the festival's IG vernacular.                            */
+  .tour-stage {
+    position: relative;
+    background: #000;
+    overflow: hidden;
+    aspect-ratio: 9 / 16;
+    max-height: 65vh;
+    width: auto;
+    max-width: 100%;
+  }
+  @media (min-width: 640px) {
+    .tour-stage {
+      max-height: 70vh;
+      border: 6px solid #1a1a1a;
+      border-radius: 22px;
+    }
+  }
+  /* Landscape phones: vertical 9:16 stage would be too narrow at 65vh.
+     Let it grow taller so the video stays watchable. */
+  @media (orientation: landscape) and (max-width: 900px) {
+    .tour-stage {
+      max-height: 88vh;
+    }
+  }
+  /* Hint label fades in/out gently — no jarring snap on or off. */
+  .tour-hint {
+    animation: tourHintFade 2.5s ease both;
+  }
+  @keyframes tourHintFade {
+    0%   { opacity: 0; }
+    15%  { opacity: 0.95; }
+    80%  { opacity: 0.95; }
+    100% { opacity: 0; }
+  }
+
+  /* Plane along arc — Framer Motion doesn't reliably animate CSS
+     offset-distance. Use a native @keyframes animation instead.
+     The reduce-motion rule above neutralises this to 0.01ms, so
+     vestibular-sensitive users see the plane jump to the destination. */
+  .plane-fly {
+    animation: planeFly 3.2s cubic-bezier(0.22, 1, 0.36, 1) 0.8s both;
+  }
+  @keyframes planeFly {
+    from { offset-distance: 0%;   -webkit-offset-distance: 0%;   }
+    to   { offset-distance: 100%; -webkit-offset-distance: 100%; }
+  }
 </style>
 </head>
 <body>
@@ -206,6 +257,7 @@ const PASS_INCLUDES = {
   "Sunday Pass":         ["fusion", "desiAfro", "lavani", "cheraw"],
   "Full Festival Pass":  ["bollyfolk", "garba", "kuthu", "chhau", "giddha", "abhinaya", "fusion", "desiAfro", "lavani", "cheraw"],
   "Charter Pass":        [], // empty — Charter holders use customWorkshops on the participant record
+  "Opening Party Only":  [], // empty — itinerary auto-includes OP via the includesOP check below
 };
 
 // OP_PERFORMERS, PASS_ADDONS, GALA_TICKETS, PARTICIPANTS — all moved to
@@ -267,12 +319,13 @@ async function lookupParticipant(query) {
    These appear ONLY on the boarding-pass corner ribbon. The rest of
    the application stays elegant and neutral.                         */
 const PASS_RIBBON = {
-  "Full Festival Pass": { color: "#F08A2C", label: "Full Festival" }, // orange
-  "Friday Pass":         { color: "#2A8AC9", label: "Friday"       }, // blue
-  "Saturday Pass":       { color: "#E64C95", label: "Saturday"     }, // pink
-  "Sunday Pass":         { color: "#4FA84A", label: "Sunday"       }, // green
-  "Discovery Pass":      { color: "#7A7A7A", label: "Discovery"    }, // slate placeholder — no physical band specified yet
-  "Charter Pass":        { color: "var(--charter)", label: "Charter"      }, // black — no physical wristband; digital marker only
+  "Full Festival Pass":  { color: "#F08A2C", label: "Full Festival" }, // orange
+  "Friday Pass":         { color: "#2A8AC9", label: "Friday"        }, // blue
+  "Saturday Pass":       { color: "#E64C95", label: "Saturday"      }, // pink
+  "Sunday Pass":         { color: "#4FA84A", label: "Sunday"        }, // green
+  "Discovery Pass":      { color: "#7A7A7A", label: "Discovery"     }, // slate placeholder — no physical band specified yet
+  "Charter Pass":        { color: "var(--charter)", label: "Charter"}, // black — no physical wristband; digital marker only
+  "Opening Party Only":  { color: "#7B3FA0", label: "Opening Party" }, // violet — distinct from workshop pass colors, party-coded
 };
 
 
@@ -302,10 +355,15 @@ function computeItinerary(participant) {
   const addons = participant.addonWorkshops || [];
   addons.forEach(id => { if (!seen.has(id) && W[id]) { items.push({ ...W[id], isAddon: true }); seen.add(id); } });
 
+  // Discovery / Saturday / Sunday pass holders can buy standalone OP tickets;
+  // we mark them by adding 'openingParty' to customWorkshops at the SQL level.
+  const opExtra = (participant.customWorkshops || []).includes('openingParty');
   const includesOP =
     participant.pass === "Friday Pass" ||
     participant.pass === "Full Festival Pass" ||
-    !!opSlot;
+    participant.pass === "Opening Party Only" ||
+    !!opSlot ||
+    opExtra;
   if (includesOP) {
     items.push({
       ...OPENING_PARTY,
@@ -321,10 +379,13 @@ function computeItinerary(participant) {
     return a.startMin - b.startMin;
   });
 
+  // OP-only attendees skip both callouts — they can't add the Tech Lab,
+  // and the Gala separate-ticket callout isn't relevant to a party-only pass.
+  const isOPOnly = participant.pass === "Opening Party Only";
   return {
     items,
-    hasGalaCallout: true,
-    hasTechLabCallout: !participant.isABC,
+    hasGalaCallout: !isOPOnly,
+    hasTechLabCallout: !participant.isABC && !isOPOnly,
     opPerformer: opSlot,
   };
 }
@@ -742,9 +803,11 @@ function ArrivalJourney() {
     if (phase === "shoonya") {
       // Konark portal closes at 2.6s. Shoonya/शून्य reveal at 3.1/3.8s.
       // Hold ~5s after that so the moment lands. Skip control is always available.
-      const t = setTimeout(() => setPhase("venue"), reduceMotion ? 2000 : 10500);
+      const t = setTimeout(() => setPhase("tour"), reduceMotion ? 2000 : 10500);
       return () => clearTimeout(t);
     }
+    // Tour phase does NOT auto-advance — user controls when to continue
+    // (video is 31s, they may want to rewatch or take a beat).
     // Note: venue auto-advance is handled inside VenuePhase so it cancels
     // when the user engages with a floor.
   }, [phase, reduceMotion]);
@@ -752,7 +815,8 @@ function ArrivalJourney() {
   const reset = () => { setParticipant(null); setQuery(""); setError(""); setPhase("gate"); };
   const skipToPass = () => setPhase("pass");
   const skipFromTransit = () => setPhase("shoonya");
-  const skipFromShoonya = () => setPhase("venue");
+  const skipFromShoonya = () => setPhase("tour");
+  const skipFromTour = () => setPhase("venue");
 
   return (
     <div className="min-h-screen w-full" style={{ background: "var(--paper)", color: "var(--charcoal)" }}>
@@ -775,6 +839,11 @@ function ArrivalJourney() {
         {phase === "shoonya" && participant && (
           <motion.div key="shoonya" {...fadeUp(0)}>
             <ShoonyaPhase onSkip={skipFromShoonya} />
+          </motion.div>
+        )}
+        {phase === "tour" && participant && (
+          <motion.div key="tour" {...fadeUp(0)}>
+            <TourPhase onContinue={skipFromTour} />
           </motion.div>
         )}
         {phase === "venue" && participant && (
@@ -945,7 +1014,7 @@ function TransitPhase({ participant, onSkip }) {
 
       <motion.h2 {...fadeUp(0.12)} className="text-center mb-2 max-w-2xl" style={{
         fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 500,
-        fontSize: "clamp(26px, 4.4vw, 38px)", lineHeight: 1.1, letterSpacing: "-0.005em", color: "#000",
+        fontSize: "clamp(30px, 5.4vw, 40px)", lineHeight: 1.1, letterSpacing: "-0.005em", color: "var(--ink)",
       }}>
         {firstName}, the festival{" "}
         <em style={{ fontStyle: "italic", color: "var(--vibrant)", fontWeight: 400 }}>breathes you in.</em>
@@ -953,7 +1022,7 @@ function TransitPhase({ participant, onSkip }) {
 
       <motion.p {...fadeUp(0.26)} className="text-center max-w-md mb-3" style={{
         fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontWeight: 400,
-        fontSize: 16, lineHeight: 1.35, color: "#000",
+        fontSize: "clamp(16px, 4vw, 19px)", lineHeight: 1.4, color: "var(--ink)",
       }}>
         Departing {landmarkLabel} — boarding now for Ghent.
       </motion.p>
@@ -962,6 +1031,16 @@ function TransitPhase({ participant, onSkip }) {
       <div className="relative w-full max-w-3xl" style={{ aspectRatio: "16 / 7" }}>
         <TransitArc origin={origin} />
       </div>
+
+      {/* Bottom anchor — quiet venue/date line that grounds the page so the
+          footer doesn't feel empty after the arc completes. Fades in last. */}
+      <motion.div
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+        transition={{ duration: 1.0, delay: 4.6, ease: EASE }}
+        className="absolute bottom-8 left-0 right-0 text-center px-6"
+      >
+        <Eyebrow color="var(--mute)">1 — 3 May 2026 · Shoonya, Ghent</Eyebrow>
+      </motion.div>
 
       {onSkip && <SkipControl onSkip={onSkip} label="Skip" color="#6B6B6B" delay={1.2} />}
     </section>
@@ -1077,11 +1156,15 @@ function TransitArc({ origin }) {
 
       {/* AIRPLANE — paper-airplane silhouette. Nose at +X is unambiguous,
           so offsetRotate:"auto" reliably points the nose forward along
-          the curve. Vendor prefixes added for Safari support.            */}
+          the curve. Vendor prefixes added for Safari support.
+
+          The fade-in is Framer Motion (works for opacity).
+          The path-following motion is a CSS @keyframes animation
+          (.plane-fly) — Framer Motion doesn't reliably animate the
+          CSS offset-distance property.                                  */}
       <motion.g initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.0, duration: 0.4 }}>
-        <motion.g
-          initial={{ offsetDistance: "0%" }} animate={{ offsetDistance: "100%" }}
-          transition={{ duration: 3.2, delay: 0.8, ease: EASE }}
+        <g
+          className="plane-fly"
           style={{
             offsetPath: `path('${pathD}')`,
             offsetRotate: "auto",
@@ -1098,7 +1181,7 @@ function TransitArc({ origin }) {
             {/* fold line down the centre (subtle, signals airplane) */}
             <path d="M 14 0 L -3 0" stroke="#FFFFFF" strokeWidth="0.4" opacity="0.55" />
           </g>
-        </motion.g>
+        </g>
       </motion.g>
 
       {/* Arrival ring on Belfort */}
@@ -1273,6 +1356,139 @@ function ShoonyaPhase({ onSkip }) {
 }
 
 /* ============================================================
+   14b. STEP INSIDE — 30s vertical tour of Shoonya
+   ============================================================ */
+/* For first-time visitors. Plays right after the facade moment, before
+   they explore individual floors. Phone-bezel framing on desktop, full-bleed
+   on mobile. Tap-to-pause; reduce-motion users see the poster image instead.
+   No auto-advance — user clicks Continue when ready. */
+function TourPhase({ onContinue }) {
+  const reduceMotion = useReducedMotion();
+  const videoRef = useRef(null);
+  const [paused, setPaused] = useState(false);
+  const [ended, setEnded] = useState(false);
+  // Hint visible for ~2.5s on mount so users know the stage is interactive.
+  // After that, the corner icon stays at low opacity for ongoing discoverability.
+  const [hintVisible, setHintVisible] = useState(true);
+  useEffect(() => {
+    const t = setTimeout(() => setHintVisible(false), 2500);
+    return () => clearTimeout(t);
+  }, []);
+
+  const togglePlay = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (v.paused) { v.play(); setPaused(false); }
+    else { v.pause(); setPaused(true); }
+  };
+
+  return (
+    <section className="min-h-screen flex flex-col items-center justify-center px-4 sm:px-6 py-10">
+      <motion.div {...fadeUp(0)} className="mb-3">
+        <Eyebrow>30-second tour</Eyebrow>
+      </motion.div>
+      <motion.h2 {...fadeUp(0.1)} className="text-center mb-2 max-w-2xl" style={{
+        fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 500,
+        fontSize: "clamp(28px, 5vw, 44px)", lineHeight: 1.1, letterSpacing: "-0.005em", color: "var(--ink)",
+      }}>
+        Step inside <em style={{ fontStyle: "italic", color: "var(--vibrant-text)", fontWeight: 400 }}>Shoonya.</em>
+      </motion.h2>
+      <motion.p {...fadeUp(0.22)} className="text-center max-w-md mb-8" style={{
+        fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontWeight: 400,
+        fontSize: 16, lineHeight: 1.4, color: "var(--ink)",
+      }}>
+        A first look around — so the door feels familiar when you arrive.
+      </motion.p>
+
+      <motion.div {...fadeUp(0.34)} className="tour-stage">
+        {reduceMotion ? (
+          <img src="./venue/shoonya-tour.jpg" alt="Inside Shoonya"
+            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+        ) : (
+          <button type="button" onClick={togglePlay}
+            aria-label={paused ? "Play Shoonya tour" : "Pause Shoonya tour"}
+            aria-pressed={!paused}
+            style={{
+              position: "relative", display: "block", width: "100%", height: "100%",
+              padding: 0, border: "none", background: "#000", cursor: "pointer",
+            }}>
+            <video
+              ref={videoRef}
+              src="./venue/shoonya-tour.mp4"
+              poster="./venue/shoonya-tour.jpg"
+              autoPlay muted playsInline preload="metadata"
+              onEnded={() => setEnded(true)}
+              aria-hidden="true"
+              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+            />
+            {paused && (
+              <div style={{
+                position: "absolute", inset: 0, display: "flex",
+                alignItems: "center", justifyContent: "center",
+                background: "rgba(0,0,0,0.55)", color: "#fff",
+                fontFamily: "Inter, sans-serif", fontSize: 11,
+                letterSpacing: "0.18em", textTransform: "uppercase",
+              }}>Tap to play</div>
+            )}
+            {/* Persistent corner affordance — pause/play glyph at low opacity
+                so users always know the stage is interactive. WCAG 2.2.2. */}
+            <div aria-hidden="true" style={{
+              position: "absolute", bottom: 10, right: 10,
+              width: 28, height: 28, borderRadius: "50%",
+              background: "rgba(0,0,0,0.55)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              opacity: paused ? 0.95 : 0.45,
+              transition: "opacity 0.3s ease",
+              pointerEvents: "none",
+            }}>
+              {paused ? (
+                <svg width="10" height="12" viewBox="0 0 10 12" fill="#fff" aria-hidden="true">
+                  <polygon points="0,0 10,6 0,12" />
+                </svg>
+              ) : (
+                <svg width="10" height="12" viewBox="0 0 10 12" fill="#fff" aria-hidden="true">
+                  <rect x="1" y="1" width="3" height="10" />
+                  <rect x="6" y="1" width="3" height="10" />
+                </svg>
+              )}
+            </div>
+            {/* On-mount hint — fades in then out so first-time viewers know
+                the stage is tappable, without nagging on every glance. */}
+            {hintVisible && !paused && (
+              <div className="tour-hint" style={{
+                position: "absolute", bottom: 10, left: 10,
+                background: "rgba(0,0,0,0.55)", color: "#fff",
+                fontFamily: "Inter, sans-serif", fontSize: 10,
+                letterSpacing: "0.16em", textTransform: "uppercase",
+                padding: "5px 10px", pointerEvents: "none",
+              }}>Tap to pause</div>
+            )}
+          </button>
+        )}
+      </motion.div>
+
+      <motion.button
+        onClick={onContinue}
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+        transition={{ duration: 0.6, delay: 1.0, ease: EASE }}
+        className="mt-8"
+        style={{
+          fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 500,
+          letterSpacing: "0.18em", textTransform: "uppercase",
+          color: "var(--vibrant-text)", background: "transparent",
+          /* 1px (not 0.5px hairline) — primary CTA where reliable render
+             on hi-DPI matters more than the system's delicate hairline. */
+          border: "1px solid var(--vibrant-text)",
+          /* Bumped to 14/26 for a comfortable ~50px touch target on mobile. */
+          padding: "14px 26px", cursor: "pointer",
+        }}>
+        {ended ? "Continue →" : "Skip the tour →"}
+      </motion.button>
+    </section>
+  );
+}
+
+/* ============================================================
    15. VENUE CROSS-SECTION — five floors, sequential reveal
    ============================================================ */
 /* Each floor carries a short description + the workshops that happen there.
@@ -1289,14 +1505,14 @@ const FLOORS = [
   {
     key: "MEZ", label: "Mezzanine",
     rooms: [{ name: "Changing room", weight: "muted" }],
-    desc: "The half-level between floors. Drop your outside shoes, change into dance attire, leave bags here. Shared, considerate, fluid.",
+    desc: "The half-level between floors. Drop your outside shoes here and change into dance attire. Space is tight — please keep bags with you.",
     sessions: ["Open all three days"],
     media: null,  // dormitory shot wasn't the changing room — skip until a real photo lands
   },
   {
     key: "F1", label: "1st floor",
     rooms: [{ name: "Studio Art Deco · Theatre", weight: "primary" }],
-    desc: "The largest studio. By day it's the main workshop floor; by Saturday evening it transforms into Shoonya Theatre for the Gala Showcase.",
+    desc: "The largest studio. By day it's the main workshop floor; by Saturday evening it transforms into Shoonya Theatre for the Gala Showcase (entered from the other side).",
     sessions: [
       "Fri · 17:00 — Bollywood folk fusion",
       "Fri · 18:30 — Garba choreography",
@@ -1322,7 +1538,7 @@ const FLOORS = [
       "Sun · 13:30 — Lavani",
       "Sun · 15:50 — Cheraw",
     ],
-    media: ["./venue/ananta.mp4", "./venue/bar.jpg"],  // Studio Ananta tour video + Shoonya Bar photo
+    media: "./venue/ananta.jpg",  // Studio Ananta only — bar pic was making Ananta look smaller; full bar shows up in the Shoonya tour video
   },
   {
     key: "BAS", label: "Basement",
@@ -1664,7 +1880,7 @@ function BoardingPassPhase({ participant, onReset }) {
             tropes (rounded corners + drop shadow) by explicit design decision
             (Apr 27, Swapnil). The rest of the journey stays Shoonya-strict. */}
         <div
-          className="relative bg-white flex flex-col md:flex-row"
+          className="relative bg-white flex flex-col"
           style={{
             borderRadius: 18,
             border: "1px solid var(--rule)",
@@ -1675,6 +1891,8 @@ function BoardingPassPhase({ participant, onReset }) {
           {/* Wristband corner strip */}
           <PassRibbon pass={participant.pass} />
 
+          {/* Pass body — main panel + perforated stub side-by-side */}
+          <div className="flex flex-col md:flex-row">
           {/* MAIN PANEL */}
           <div className="relative flex-1 p-6 sm:p-8" style={{ minWidth: 0 }}>
             {/* top accent line */}
@@ -1822,6 +2040,35 @@ function BoardingPassPhase({ participant, onReset }) {
 
           {/* PERFORATION + STUB */}
           <PassStub participant={participant} fromCode={fromCode} />
+          </div>
+
+          {/* CARD FOOTER — full festival programme link, prominent placement.
+              Sits inside the card so the rounded corners + overflow-hidden clip it
+              cleanly, and the saffron rule reads as part of the ticket design. */}
+          <a href="https://gidf.abcdans.com" target="_blank" rel="noopener noreferrer"
+            className="block text-center"
+            style={{
+              borderTop: "1px solid var(--rule)",
+              background: "var(--panel)",
+              padding: "16px 20px",
+              fontFamily: "Inter, sans-serif",
+              fontSize: 12,
+              fontWeight: 500,
+              letterSpacing: "0.18em",
+              textTransform: "uppercase",
+              color: "var(--vibrant-text)",
+              textDecoration: "none",
+            }}>
+            Full festival programme
+            <span style={{ color: "var(--mute)", margin: "0 10px" }} aria-hidden="true">·</span>
+            <span style={{
+              textTransform: "lowercase",
+              letterSpacing: "0.04em",
+              borderBottom: "1px solid var(--vibrant-text)",
+              paddingBottom: 1,
+            }}>gidf.abcdans.com</span>
+            <span aria-hidden="true" style={{ marginLeft: 8 }}>→</span>
+          </a>
         </div>
       </motion.div>
 
