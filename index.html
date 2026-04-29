@@ -308,7 +308,8 @@ const PASS_INCLUDES = {
   "Saturday Pass":       ["kuthu", "chhau", "giddha", "abhinaya"],
   "Sunday Pass":         ["fusion", "desiAfro", "lavani", "cheraw"],
   "Full Festival Pass":  ["bollyfolk", "garba", "kuthu", "chhau", "giddha", "abhinaya", "fusion", "desiAfro", "lavani", "cheraw"],
-  "A la Carte Pass":        [], // empty — Charter holders use customWorkshops on the participant record
+  "A la Carte Pass":        [], // empty — A la Carte holders use customWorkshops on the participant record
+  "Charter Pass":           [], // legacy alias (pre-SQL-section-16 rename)
   "Opening Party Only":  [], // empty — itinerary auto-includes OP via the includesOP check below
   "Gala Audience":       [], // empty — itinerary auto-includes GALA via the includesGala check below
 };
@@ -394,6 +395,7 @@ const PASS_RIBBON = {
   "Sunday Pass":         { color: "#4FA84A", label: "Sunday"        }, // green
   "Discovery Pass":      { color: "#7A7A7A", label: "Discovery"     }, // slate placeholder — no physical band specified yet
   "A la Carte Pass":        { color: "var(--charter)", label: "A la Carte" }, // black — no physical wristband; digital marker only
+  "Charter Pass":           { color: "var(--charter)", label: "A la Carte" }, // legacy alias before SQL section 16 has run
   "Opening Party Only":  { color: "#7B3FA0", label: "Opening Party" }, // violet — distinct from workshop pass colors, party-coded
   "Gala Audience":       { color: "#C9982E", label: "Gala Audience" }, // deep gold — formal showcase evening
 };
@@ -416,7 +418,7 @@ function computeItinerary(participant) {
 
   // Charter Pass uses customWorkshops on the participant record;
   // every other pass uses the bundled list.
-  const baseIds = participant.pass === "A la Carte Pass"
+  const baseIds = (participant.pass === "A la Carte Pass" || participant.pass === "Charter Pass")
     ? (participant.customWorkshops || [])
     : (PASS_INCLUDES[participant.pass] || []);
   baseIds.forEach(id => { if (!seen.has(id) && W[id]) { items.push(W[id]); seen.add(id); } });
@@ -1153,12 +1155,12 @@ function ArrivalJourney() {
         )}
         {phase === "tour" && participant && (
           <motion.div key="tour" {...fadeUp(0)}>
-            <TourPhase onContinue={skipFromTour} />
+            <TourPhase onContinue={skipFromTour} onReset={reset} />
           </motion.div>
         )}
         {phase === "venue" && participant && (
           <motion.div key="venue" {...fadeUp(0)}>
-            <VenuePhase onContinue={skipToPass} />
+            <VenuePhase onContinue={skipToPass} onReset={reset} />
           </motion.div>
         )}
         {phase === "pass" && participant && (
@@ -1168,6 +1170,31 @@ function ArrivalJourney() {
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+/* Back-to-start control — top-left small button that resets the journey
+   to Gate. Lets the welcome desk look up the next person without waiting
+   for the journey to complete. Available on Tour, Venue, and Pass phases. */
+function BackToStart({ onReset }) {
+  return (
+    <motion.button
+      onClick={onReset}
+      initial={{ opacity: 0 }} animate={{ opacity: 0.85 }}
+      transition={{ duration: 0.6, delay: 0.6, ease: EASE }}
+      className="absolute top-6 left-6 sm:top-8 sm:left-8 transition-opacity hover:opacity-100 focus-visible:opacity-100"
+      style={{
+        color: "#6B6B6B", background: "none", border: "none", cursor: "pointer",
+        padding: "12px 16px", minHeight: 44,
+        fontFamily: "Inter, sans-serif", fontWeight: 500, fontSize: 12,
+        letterSpacing: "0.18em", textTransform: "uppercase",
+        display: "inline-flex", alignItems: "center", gap: 6,
+        zIndex: 5,
+      }}
+      aria-label="Back to start — search for another person">
+      <span aria-hidden="true">←</span>
+      Back
+    </motion.button>
   );
 }
 
@@ -1230,7 +1257,7 @@ function GatePhase({ query, setQuery, error, onEnter }) {
 
         <motion.p {...fadeUp(0.18)} className="text-center max-w-md mx-auto mb-10" style={{
           fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontWeight: 400,
-          fontSize: "clamp(16px, 2.4vw, 19px)", lineHeight: 1.4, color: "#000",
+          fontSize: "clamp(16px, 2.4vw, 19px)", lineHeight: 1.4, color: "var(--ink)",
         }}>
           Tell us who's arriving.
         </motion.p>
@@ -1246,11 +1273,11 @@ function GatePhase({ query, setQuery, error, onEnter }) {
             <input type="text" value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && onEnter()}
-              placeholder="Your name, or the email you registered with"
+              placeholder="Your full name or email"
               aria-label="Your name or registered email"
               autoFocus
               className="flex-1 bg-transparent outline-none px-3 py-4"
-              style={{ fontSize: 15, color: "#000", fontFamily: "Inter, sans-serif", fontWeight: 400 }} />
+              style={{ fontSize: 15, color: "var(--ink)", fontFamily: "Inter, sans-serif", fontWeight: 400 }} />
             <button onClick={onEnter} aria-label="Step into the festival"
               className="flex-shrink-0 flex items-center gap-2 px-5 py-4 transition-opacity hover:opacity-80"
               style={{
@@ -1298,7 +1325,7 @@ function SearchingPhase({ query }) {
       <Eyebrow className="mb-3">Finding your pass</Eyebrow>
       <div style={{ fontSize: 14, color: "var(--charcoal)" }}>
         Looking up{" "}
-        <em style={{ fontStyle: "italic", color: "#000", fontFamily: "'Playfair Display', Georgia, serif" }}>
+        <em style={{ fontStyle: "italic", color: "var(--ink)", fontFamily: "'Playfair Display', Georgia, serif" }}>
           "{query}"
         </em>{" "}
         in the registry…
@@ -1733,7 +1760,7 @@ function ShoonyaPhase({ onSkip }) {
    they explore individual floors. Phone-bezel framing on desktop, full-bleed
    on mobile. Tap-to-pause; reduce-motion users see the poster image instead.
    No auto-advance — user clicks Continue when ready. */
-function TourPhase({ onContinue }) {
+function TourPhase({ onContinue, onReset }) {
   const reduceMotion = useReducedMotion();
   const videoRef = useRef(null);
   const [paused, setPaused] = useState(false);
@@ -1771,6 +1798,7 @@ function TourPhase({ onContinue }) {
 
   return (
     <section className="relative min-h-screen flex flex-col items-center justify-center px-4 sm:px-6 py-10">
+      {onReset && <BackToStart onReset={onReset} />}
       <motion.div {...fadeUp(0)} className="mb-3">
         <Eyebrow>30-second tour</Eyebrow>
       </motion.div>
@@ -1812,7 +1840,7 @@ function TourPhase({ onContinue }) {
               <div style={{
                 position: "absolute", inset: 0, display: "flex",
                 alignItems: "center", justifyContent: "center",
-                background: "rgba(0,0,0,0.55)", color: "#fff",
+                background: "rgba(0,0,0,0.55)", color: "var(--paper)",
                 fontFamily: "Inter, sans-serif", fontSize: 11,
                 letterSpacing: "0.18em", textTransform: "uppercase",
               }}>Tap to play</div>
@@ -1844,7 +1872,7 @@ function TourPhase({ onContinue }) {
             {hintVisible && !paused && (
               <div className="tour-hint" style={{
                 position: "absolute", bottom: 10, left: 10,
-                background: "rgba(0,0,0,0.55)", color: "#fff",
+                background: "rgba(0,0,0,0.55)", color: "var(--paper)",
                 fontFamily: "Inter, sans-serif", fontSize: 10,
                 letterSpacing: "0.16em", textTransform: "uppercase",
                 padding: "5px 10px", pointerEvents: "none",
@@ -1872,10 +1900,8 @@ function TourPhase({ onContinue }) {
         {ended ? "Continue →" : "Skip the tour →"}
       </motion.button>
 
-      {/* Guaranteed bottom-right escape hatch — visible regardless of
-          viewport, matches every other phase. Same handler as the
-          mid-page CTA. */}
-      <SkipControl onSkip={onContinue} label="Skip" color="#6B6B6B" delay={1.2} />
+      {/* No corner SkipControl — the inline "Skip the tour →" / "Continue →"
+          button (above) is the single, unambiguous escape on this phase. */}
     </section>
   );
 }
@@ -1941,7 +1967,7 @@ const FLOORS = [
   },
 ];
 
-function VenuePhase({ onContinue }) {
+function VenuePhase({ onContinue, onReset }) {
   const [active, setActive] = useState(null);
   const reduceMotion = useReducedMotion();
 
@@ -1955,19 +1981,20 @@ function VenuePhase({ onContinue }) {
   }, [active, reduceMotion, onContinue]);
 
   return (
-    <section className="min-h-screen flex flex-col items-center justify-center px-6 py-12">
+    <section className="relative min-h-screen flex flex-col items-center justify-center px-6 py-12">
+      {onReset && <BackToStart onReset={onReset} />}
       <motion.div {...fadeUp(0)} className="mb-3">
         <Eyebrow>Inside Shoonya</Eyebrow>
       </motion.div>
       <motion.h2 {...fadeUp(0.1)} className="text-center mb-2 max-w-2xl" style={{
         fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 500,
-        fontSize: "clamp(28px, 5vw, 44px)", lineHeight: 1.1, letterSpacing: "-0.005em", color: "#000",
+        fontSize: "clamp(28px, 5vw, 44px)", lineHeight: 1.1, letterSpacing: "-0.005em", color: "var(--ink)",
       }}>
         Find your <em style={{ fontStyle: "italic", color: "var(--vibrant-text)", fontWeight: 400 }}>bearings.</em>
       </motion.h2>
       <motion.p {...fadeUp(0.22)} className="text-center max-w-md mb-10" style={{
         fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontWeight: 400,
-        fontSize: 16, lineHeight: 1.4, color: "#000",
+        fontSize: 16, lineHeight: 1.4, color: "var(--ink)",
       }}>
         Five levels, three studios, one bar. Tap any floor to see what happens there.
       </motion.p>
@@ -2102,7 +2129,7 @@ function FloorRow({ floor, index, active, anyActive, onTap }) {
                 <div>
                   <p style={{
                     fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic",
-                    fontSize: 15, lineHeight: 1.55, color: "#000", margin: 0,
+                    fontSize: 15, lineHeight: 1.55, color: "var(--ink)", margin: 0,
                   }}>
                     {floor.desc}
                   </p>
@@ -2269,7 +2296,7 @@ function BoardingPassPhase({ participant, onReset }) {
         <Eyebrow color="#E85D1F">Boarding pass issued</Eyebrow>
         <h2 className="mt-3 mb-2" style={{
           fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 500,
-          fontSize: "clamp(32px, 5.5vw, 48px)", lineHeight: 1.1, letterSpacing: "-0.005em", color: "#000",
+          fontSize: "clamp(32px, 5.5vw, 48px)", lineHeight: 1.1, letterSpacing: "-0.005em", color: "var(--ink)",
         }}>
           Itinerary for <em style={{ fontStyle: "italic", color: "var(--vibrant)", fontWeight: 400 }}>{firstName}</em>
         </h2>
@@ -2305,8 +2332,10 @@ function BoardingPassPhase({ participant, onReset }) {
             {/* top accent line */}
             <div style={{ position: "absolute", inset: "0 0 auto 0", height: 4, background: "var(--vibrant)" }} />
 
-            {/* Header row */}
-            <div className="flex items-start justify-between mb-7 pt-2">
+            {/* Header row — left-aligned only, so the wristband ribbon
+                (top-right) doesn't cover anything. Pass type now sits
+                inline with the festival branding. */}
+            <div className="mb-7 pt-2">
               <div className="flex items-center gap-3">
                 <InfinityMark className="w-9 h-5" />
                 <div>
@@ -2316,16 +2345,15 @@ function BoardingPassPhase({ participant, onReset }) {
                   </div>
                 </div>
               </div>
-              <div className="text-right">
+              <div className="mt-3 flex items-baseline gap-2">
                 <Eyebrow color="#8A8A8A">Class</Eyebrow>
-                <div style={{
+                <span style={{
                   fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 500,
-                  fontSize: 18, color: "var(--vibrant-text)", letterSpacing: "-0.005em", marginTop: 2,
+                  fontSize: 17, color: "var(--vibrant-text)", letterSpacing: "-0.005em",
+                  fontStyle: "italic",
                 }}>
-                  <em style={{ fontStyle: "italic", fontWeight: 400 }}>
-                    {participant.pass.replace(" Pass", "")}
-                  </em>
-                </div>
+                  {participant.pass.replace(" Pass", "")}
+                </span>
               </div>
             </div>
 
@@ -2335,7 +2363,7 @@ function BoardingPassPhase({ participant, onReset }) {
               <div className="mt-1.5 flex items-baseline flex-wrap gap-3">
                 <h2 style={{
                   fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 500,
-                  fontSize: "clamp(28px, 5vw, 40px)", lineHeight: 1.0, letterSpacing: "-0.01em", color: "#000",
+                  fontSize: "clamp(28px, 5vw, 40px)", lineHeight: 1.0, letterSpacing: "-0.01em", color: "var(--ink)",
                   margin: 0,
                 }}>
                   {participant.name}
@@ -2344,7 +2372,7 @@ function BoardingPassPhase({ participant, onReset }) {
                   <span style={{
                     fontSize: 10, letterSpacing: "0.18em", textTransform: "uppercase",
                     fontFamily: "Inter, sans-serif", fontWeight: 500,
-                    color: "#000", background: "var(--goldenrod)", padding: "3px 7px",
+                    color: "var(--ink)", background: "var(--goldenrod)", padding: "3px 7px",
                   }}>
                     ABC dancer
                   </span>
@@ -2384,7 +2412,7 @@ function BoardingPassPhase({ participant, onReset }) {
                 <Eyebrow color="#8A8A8A">From</Eyebrow>
                 <div className="mt-1.5 tabular-nums" style={{
                   fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 500,
-                  fontSize: "clamp(28px, 5vw, 40px)", lineHeight: 1, color: "#000",
+                  fontSize: "clamp(28px, 5vw, 40px)", lineHeight: 1, color: "var(--ink)",
                   letterSpacing: "-0.01em",
                 }}>
                   {fromCode}
@@ -2476,7 +2504,7 @@ function BoardingPassPhase({ participant, onReset }) {
               style={{ borderBottom: "0.5px solid var(--mist)" }}>
               <h3 style={{
                 fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 500,
-                fontSize: "clamp(20px, 3vw, 26px)", lineHeight: 1.15, color: "#000", margin: 0,
+                fontSize: "clamp(20px, 3vw, 26px)", lineHeight: 1.15, color: "var(--ink)", margin: 0,
               }}>
                 Your full itinerary
               </h3>
@@ -2546,7 +2574,7 @@ function BoardingPassPhase({ participant, onReset }) {
           aria-label="Step back to the gate and search for another participant"
           style={{
             fontFamily: "Inter, sans-serif", fontWeight: 500, fontSize: 12,
-            letterSpacing: "0.18em", textTransform: "uppercase", color: "#000",
+            letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--ink)",
             padding: "12px 16px", minHeight: 44,
             background: "none", border: "none",
             cursor: "pointer",
@@ -2703,7 +2731,9 @@ function PassStub({ participant, fromCode }) {
               addLine("openingParty", "Opening Party", { count: admitCount });
             } else if (pass === "Gala Audience") {
               addLine("gala", "Gala Showcase", { count: admitCount });
-            } else if (pass === "A la Carte Pass") {
+            } else if (pass === "A la Carte Pass" || pass === "Charter Pass") {
+              // Backwards-compatible: accepts both labels in case section 16
+              // of 003 (the rename) hasn't been applied yet.
               customWorkshops.forEach(id => {
                 if (id === "openingParty") return; // handle in OP block below
                 addLine(id, SHORT_WORKSHOP_LABELS[id] || id);
@@ -2786,13 +2816,13 @@ function PassStub({ participant, fromCode }) {
                       <span style={{
                         fontFamily: "'Playfair Display', Georgia, serif",
                         fontWeight: 500,
-                        fontSize: 15, lineHeight: 1.35, color: "#000",
+                        fontSize: 15, lineHeight: 1.35, color: "var(--ink)",
                         flex: "1 1 auto", minWidth: 0,
                       }}>
                         {line.label}
                         {line.tag && (
                           <span style={{
-                            fontFamily: "Inter, sans-serif", fontWeight: 500, fontSize: 9,
+                            fontFamily: "Inter, sans-serif", fontWeight: 600, fontSize: 10,
                             letterSpacing: "0.18em", textTransform: "uppercase",
                             color: line.tag === "ABC BONUS" ? "var(--goldenrod-text)" : "var(--mute)",
                             marginLeft: 6,
@@ -2800,14 +2830,16 @@ function PassStub({ participant, fromCode }) {
                         )}
                       </span>
                       {line.count > 1 && (
-                        <span style={{
-                          fontFamily: "Inter, sans-serif", fontWeight: 600,
-                          fontSize: 13, color: "var(--vibrant-text)",
-                          letterSpacing: "0.01em", whiteSpace: "nowrap",
-                        }}>
+                        <span
+                          aria-label={`admits ${line.count}`}
+                          style={{
+                            fontFamily: "Inter, sans-serif", fontWeight: 600,
+                            fontSize: 13, color: "var(--vibrant-text)",
+                            letterSpacing: "0.01em", whiteSpace: "nowrap",
+                          }}>
                           {/* "× N" reads as "N tickets" / "admits N" — */}
                           {/* unambiguous total count (vs "+N" which could read as "plus N more"). */}
-                          × {line.count}
+                          <span aria-hidden="true">× {line.count}</span>
                         </span>
                       )}
                     </div>
@@ -2821,7 +2853,7 @@ function PassStub({ participant, fromCode }) {
             <Eyebrow color="#8A8A8A">Passenger</Eyebrow>
             <div className="mt-1" style={{
               fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 500,
-              fontSize: 16, lineHeight: 1.15, color: "#000",
+              fontSize: 16, lineHeight: 1.15, color: "var(--ink)",
             }}>
               {participant.name}
             </div>
@@ -2995,7 +3027,7 @@ function TimelineNode({ w, delay, isLast, isFirstOfDay }) {
             </span>
             <span style={{
               fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 500,
-              fontSize: "clamp(15px, 2.2vw, 17px)", lineHeight: 1.25, color: "#000",
+              fontSize: "clamp(15px, 2.2vw, 17px)", lineHeight: 1.25, color: "var(--ink)",
               letterSpacing: "-0.005em",
             }}>
               {w.title}
@@ -3003,7 +3035,7 @@ function TimelineNode({ w, delay, isLast, isFirstOfDay }) {
             {isABCBonus && (
               <span style={{
                 fontSize: 9, letterSpacing: "0.18em", textTransform: "uppercase",
-                fontFamily: "Inter, sans-serif", fontWeight: 500, color: "#000",
+                fontFamily: "Inter, sans-serif", fontWeight: 500, color: "var(--ink)",
                 background: "var(--goldenrod)", padding: "2px 5px",
               }}>ABC bonus</span>
             )}
@@ -3018,7 +3050,7 @@ function TimelineNode({ w, delay, isLast, isFirstOfDay }) {
           <Chevron className="w-4 h-4" style={{ color: "var(--mute)" }} rotate={open} />
         </div>
         <div className="mt-0.5" style={{ fontSize: 12, color: "var(--charcoal)" }}>
-          <em style={{ fontStyle: "italic", fontFamily: "'Playfair Display', Georgia, serif", color: "#000", fontSize: 12.5 }}>
+          <em style={{ fontStyle: "italic", fontFamily: "'Playfair Display', Georgia, serif", color: "var(--ink)", fontSize: 12.5 }}>
             {w.teacher}
           </em>
           <Bindu />
@@ -3033,7 +3065,7 @@ function TimelineNode({ w, delay, isLast, isFirstOfDay }) {
             }}>You're on stage</span>
             <span style={{
               fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 500,
-              fontSize: 13, color: "#000", fontVariantNumeric: "tabular-nums",
+              fontSize: 13, color: "var(--ink)", fontVariantNumeric: "tabular-nums",
             }}>
               {w.performerSlot} block
               {w.performerWith && (
@@ -3056,7 +3088,7 @@ function TimelineNode({ w, delay, isLast, isFirstOfDay }) {
             }}>+ guests joining</span>
             <span style={{
               fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 500,
-              fontSize: 13, color: "#000", fontVariantNumeric: "tabular-nums",
+              fontSize: 13, color: "var(--ink)", fontVariantNumeric: "tabular-nums",
             }}>
               {w.opGuestCount} {w.opGuestCount === 1 ? "guest" : "guests"} on your ticket
             </span>
@@ -3076,7 +3108,7 @@ function TimelineNode({ w, delay, isLast, isFirstOfDay }) {
             </span>
             <span style={{
               fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontWeight: 400,
-              fontSize: 13, lineHeight: 1.4, color: "#000",
+              fontSize: 13, lineHeight: 1.4, color: "var(--ink)",
             }}>
               {w.notice}
             </span>
@@ -3105,7 +3137,7 @@ function TimelineNode({ w, delay, isLast, isFirstOfDay }) {
                   )}
                   <p style={{
                     fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic",
-                    fontWeight: 400, fontSize: 14, lineHeight: 1.6, color: "#000",
+                    fontWeight: 400, fontSize: 14, lineHeight: 1.6, color: "var(--ink)",
                     margin: 0, maxWidth: "55ch",
                   }}>{w.desc}</p>
                 </div>
@@ -3129,7 +3161,7 @@ function FactRow({ label, value }) {
     <div className="flex items-baseline justify-between gap-4" style={{ borderBottom: "0.5px solid #EFEFEF", paddingBottom: 6 }}>
       <Eyebrow color="#8A8A8A">{label}</Eyebrow>
       <div style={{
-        fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 500, fontSize: 13, color: "#000",
+        fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 500, fontSize: 13, color: "var(--ink)",
         textAlign: "right", maxWidth: "22ch",
       }}>
         {value}
@@ -3177,7 +3209,7 @@ function FlightConditions() {
               <div>
                 <div style={{
                   fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 500,
-                  fontSize: 16, lineHeight: 1.2, color: "#000",
+                  fontSize: 16, lineHeight: 1.2, color: "var(--ink)",
                 }}>
                   {c.title}
                 </div>
