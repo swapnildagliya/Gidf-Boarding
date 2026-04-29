@@ -292,6 +292,23 @@ const PASS_INCLUDES = {
   "Full Festival Pass":  ["bollyfolk", "garba", "kuthu", "chhau", "giddha", "abhinaya", "fusion", "desiAfro", "lavani", "cheraw"],
   "Charter Pass":        [], // empty — Charter holders use customWorkshops on the participant record
   "Opening Party Only":  [], // empty — itinerary auto-includes OP via the includesOP check below
+  "Gala Audience":       [], // empty — itinerary auto-includes GALA via the includesGala check below
+};
+
+// Gala showcase event — Saturday evening culminating performance.
+// Surfaced via a flag on participants who have galaTickets > 0 OR pass='Gala Audience'.
+const GALA = {
+  id: "gala", isEvent: true,
+  day: "Saturday · 2 May", dayKey: "Sat",
+  time: "20:00 onwards", startMin: 1200,
+  title: "Gala Showcase",
+  subtitle: "Festival's culminating performance evening",
+  teacher: "All visiting faculty + the ABC company",
+  studio: "Studio Art Deco · Theatre", floor: "1st Floor",
+  level: "Audience event — sold out",
+  attire: "Festival best — Indian or anything you'd dance in",
+  desc: "The faculty take the stage. Doors from 19:30, performance starts 20:00. Theatre is on the 1st floor (Studio Art Deco transformed for the night) — entered from the other side of the building.",
+  notice: "Sold out at the door. Your ticket is your seat — bring proof of purchase or your name lookup will admit you.",
 };
 
 // OP_PERFORMERS, PASS_ADDONS, GALA_TICKETS, PARTICIPANTS — all moved to
@@ -360,6 +377,7 @@ const PASS_RIBBON = {
   "Discovery Pass":      { color: "#7A7A7A", label: "Discovery"     }, // slate placeholder — no physical band specified yet
   "Charter Pass":        { color: "var(--charter)", label: "Charter"}, // black — no physical wristband; digital marker only
   "Opening Party Only":  { color: "#7B3FA0", label: "Opening Party" }, // violet — distinct from workshop pass colors, party-coded
+  "Gala Audience":       { color: "#C9982E", label: "Gala Audience" }, // deep gold — formal showcase evening
 };
 
 
@@ -406,6 +424,13 @@ function computeItinerary(participant) {
     });
   }
 
+  // Gala Audience pass type → their pass IS the gala. Add it to itinerary
+  // so they see what / when / where, just like an OP-only attendee sees OP.
+  const isGalaAudience = participant.pass === "Gala Audience";
+  if (isGalaAudience) {
+    items.push({ ...GALA });
+  }
+
   // Sort chronologically across days
   items.sort((a, b) => {
     const dayRank = { "Fri": 0, "Sat": 1, "Sun": 2 };
@@ -413,13 +438,18 @@ function computeItinerary(participant) {
     return a.startMin - b.startMin;
   });
 
-  // OP-only attendees skip both callouts — they can't add the Tech Lab,
-  // and the Gala separate-ticket callout isn't relevant to a party-only pass.
+  // OP-only and Gala Audience pass types skip the Tech Lab callout
+  // (they can't book it). Gala-separate-ticket callout: shown to anyone
+  // who has galaTickets > 0 (regardless of pass), suppressed for OP-only
+  // (their pass is the party, not a workshop journey) — but kept for
+  // Gala Audience so even gala-only buyers see the "your ticket is
+  // confirmed" reassurance.
   const isOPOnly = participant.pass === "Opening Party Only";
+  const galaTickets = participant.galaTickets || 0;
   return {
     items,
-    hasGalaCallout: !isOPOnly,
-    hasTechLabCallout: !participant.isABC && !isOPOnly,
+    hasGalaCallout: !isOPOnly && (galaTickets > 0 || !isGalaAudience),
+    hasTechLabCallout: !participant.isABC && !isOPOnly && !isGalaAudience,
     opPerformer: opSlot,
   };
 }
@@ -2615,7 +2645,8 @@ function PassStub({ participant, fromCode }) {
       </div>
 
       <div className="relative p-6 h-full flex flex-col justify-between" style={{ minHeight: 460 }}>
-        {/* TOP — admit one + name */}
+        {/* TOP — admit count + name. admitCount > 1 for multi-ticket OP /
+            Gala buyers; defaults to 1 (renders "One") for everyone else. */}
         <div>
           <Eyebrow color="#8A8A8A">Admit</Eyebrow>
           <div style={{
@@ -2623,7 +2654,15 @@ function PassStub({ participant, fromCode }) {
             fontSize: 32, lineHeight: 1, color: "#000", marginTop: 4,
             letterSpacing: "-0.01em",
           }}>
-            One
+            {(() => {
+              const n = participant.admitCount || 1;
+              if (n === 1) return "One";
+              if (n === 2) return "Two";
+              if (n === 3) return "Three";
+              if (n === 4) return "Four";
+              if (n === 5) return "Five";
+              return n; // Six+ rendered as numerals
+            })()}
           </div>
 
           <div className="mt-7">
