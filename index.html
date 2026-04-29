@@ -2649,8 +2649,10 @@ function PassStub({ participant, fromCode }) {
       </div>
 
       <div className="relative p-6 h-full flex flex-col justify-between" style={{ minHeight: 460 }}>
-        {/* TOP — admit count + name. admitCount > 1 for multi-ticket OP /
-            Gala buyers; defaults to 1 (renders "One") for everyone else. */}
+        {/* TOP — admit count + "Pass covers" + name. admitCount > 1 for
+            multi-ticket OP / Gala buyers; defaults to 1 (renders "One")
+            for everyone else. The "Pass covers" block surfaces OP / Gala
+            entitlements at a glance — what the welcome desk needs first. */}
         <div>
           <Eyebrow color="#8A8A8A">Admit</Eyebrow>
           <div style={{
@@ -2669,7 +2671,51 @@ function PassStub({ participant, fromCode }) {
             })()}
           </div>
 
-          <div className="mt-7">
+          {/* Pass covers — OP / Gala summary for the desk. Renders only when
+              the pass type is event-coded (OP-only / Gala Audience) OR the
+              participant has extra OP guests / gala tickets. */}
+          {(() => {
+            const isOPOnly       = participant.pass === "Opening Party Only";
+            const isGalaAudience = participant.pass === "Gala Audience";
+            const opGuestCount   = participant.opGuestCount || 0;
+            const galaTickets    = participant.galaTickets || 0;
+            const lines = [];
+            if (isOPOnly)       lines.push({ event: "Opening Party",  prefix: "" });
+            if (isGalaAudience) lines.push({ event: "Gala Showcase",  prefix: "" });
+            if (opGuestCount > 0)
+              lines.push({ event: "Opening Party",  prefix: `+ ${opGuestCount} to ` });
+            if (galaTickets > 0)
+              lines.push({ event: "Gala Showcase",  prefix: `+ ${galaTickets} to ` });
+            if (lines.length === 0) return null;
+            return (
+              <div className="mt-4 pt-3" style={{ borderTop: "0.5px solid var(--mist)" }}>
+                <Eyebrow color="#8A8A8A">Pass covers</Eyebrow>
+                <div className="mt-1.5">
+                  {lines.map((line, i) => (
+                    <div key={i} style={{
+                      fontFamily: "'Playfair Display', Georgia, serif",
+                      fontStyle: line.prefix ? "normal" : "italic",
+                      fontSize: 14, lineHeight: 1.45, color: "#000",
+                      marginTop: i === 0 ? 0 : 2,
+                    }}>
+                      {line.prefix && (
+                        <span style={{
+                          fontFamily: "Inter, sans-serif",
+                          fontWeight: 500, fontSize: 12,
+                          color: "var(--vibrant-text)",
+                          letterSpacing: "0.02em",
+                          marginRight: 4,
+                        }}>{line.prefix}</span>
+                      )}
+                      {line.event}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
+          <div className="mt-6">
             <Eyebrow color="#8A8A8A">Passenger</Eyebrow>
             <div className="mt-1" style={{
               fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 500,
