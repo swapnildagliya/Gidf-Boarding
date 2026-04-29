@@ -2651,7 +2651,9 @@ function PassStub({ participant, fromCode }) {
 
         {/* BOTTOM — QR + barcode */}
         <div className="mt-8">
-          <QRBlock value={participant.email} />
+          {/* QR seed falls back to ID then name when email is NULL
+              (Charter Pass holders registered with just a first name). */}
+          <QRBlock value={participant.email || participant.id || participant.name} />
           <div className="mt-3">
             <Barcode />
           </div>
@@ -2685,9 +2687,12 @@ function MiniBlock({ label, value, accent }) {
 
 /* Stylised QR code — deterministic pattern from a string seed */
 function QRBlock({ value }) {
-  // Hash → fill 5x5 grid (anchors at corners)
+  // Hash → fill 5x5 grid (anchors at corners). Defensive against null/undef
+  // — a missing email used to crash Aaricia / Astrid / Lieve (Charter Pass
+  // first-name-only registrations).
+  const seed = value && String(value).length > 0 ? String(value) : "GIDF26";
   let h = 0;
-  for (let i = 0; i < value.length; i++) h = (h * 31 + value.charCodeAt(i)) >>> 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
   const cells = [];
   const N = 6;
   for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
