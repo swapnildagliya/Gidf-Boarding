@@ -284,13 +284,31 @@ const OPENING_PARTY = {
   notice: "Long skirts welcome — BYO skirt, dupatta or fabric, or borrow one from Shoonya if you don't have your own.",
 };
 
+// Short workshop labels for the boarding-pass stub "Pass covers" block.
+// Full titles (with subtitle / teacher) live in W; these are scannable
+// versions sized for a narrow stub column.
+const SHORT_WORKSHOP_LABELS = {
+  techLab:      "Tech & Tools Lab",
+  bollyfolk:    "Folk Fusion",
+  garba:        "Garba",
+  kuthu:        "Kuthu",
+  chhau:        "Chhau",
+  giddha:       "Giddha",
+  abhinaya:     "Abhinaya",
+  fusion:       "Bellydance",
+  desiAfro:     "Desi-Afro",
+  lavani:       "Lavani",
+  cheraw:       "Cheraw",
+  openingParty: "Opening Party",
+};
+
 const PASS_INCLUDES = {
   "Discovery Pass":      ["chhau", "giddha", "abhinaya", "desiAfro", "cheraw"],
   "Friday Pass":         ["bollyfolk", "garba"],
   "Saturday Pass":       ["kuthu", "chhau", "giddha", "abhinaya"],
   "Sunday Pass":         ["fusion", "desiAfro", "lavani", "cheraw"],
   "Full Festival Pass":  ["bollyfolk", "garba", "kuthu", "chhau", "giddha", "abhinaya", "fusion", "desiAfro", "lavani", "cheraw"],
-  "Charter Pass":        [], // empty — Charter holders use customWorkshops on the participant record
+  "A la Carte Pass":        [], // empty — Charter holders use customWorkshops on the participant record
   "Opening Party Only":  [], // empty — itinerary auto-includes OP via the includesOP check below
   "Gala Audience":       [], // empty — itinerary auto-includes GALA via the includesGala check below
 };
@@ -375,7 +393,7 @@ const PASS_RIBBON = {
   "Saturday Pass":       { color: "#E64C95", label: "Saturday"      }, // pink
   "Sunday Pass":         { color: "#4FA84A", label: "Sunday"        }, // green
   "Discovery Pass":      { color: "#7A7A7A", label: "Discovery"     }, // slate placeholder — no physical band specified yet
-  "Charter Pass":        { color: "var(--charter)", label: "Charter"}, // black — no physical wristband; digital marker only
+  "A la Carte Pass":        { color: "var(--charter)", label: "A la Carte" }, // black — no physical wristband; digital marker only
   "Opening Party Only":  { color: "#7B3FA0", label: "Opening Party" }, // violet — distinct from workshop pass colors, party-coded
   "Gala Audience":       { color: "#C9982E", label: "Gala Audience" }, // deep gold — formal showcase evening
 };
@@ -398,7 +416,7 @@ function computeItinerary(participant) {
 
   // Charter Pass uses customWorkshops on the participant record;
   // every other pass uses the bundled list.
-  const baseIds = participant.pass === "Charter Pass"
+  const baseIds = participant.pass === "A la Carte Pass"
     ? (participant.customWorkshops || [])
     : (PASS_INCLUDES[participant.pass] || []);
   baseIds.forEach(id => { if (!seen.has(id) && W[id]) { items.push(W[id]); seen.add(id); } });
@@ -2412,37 +2430,6 @@ function BoardingPassPhase({ participant, onReset }) {
               />
             </div>
 
-            {/* TIMELINE — class pass-detail so "Save your pass" mode hides
-                it (a real airline boarding pass is a credential, not a
-                multi-leg itinerary). Visible in "Save full itinerary" mode. */}
-            <div className="pass-detail mt-10">
-              <div className="flex items-baseline justify-between pb-3 mb-5 flex-wrap gap-3"
-                style={{ borderBottom: "0.5px solid var(--mist)" }}>
-                <h3 style={{
-                  fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 500,
-                  fontSize: "clamp(20px, 3vw, 26px)", lineHeight: 1.15, color: "#000", margin: 0,
-                }}>
-                  Your timeline
-                </h3>
-                <span style={{
-                  fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontWeight: 400,
-                  fontSize: 14, color: "var(--vibrant-text)",
-                }}>
-                  connecting flights, in order
-                </span>
-              </div>
-
-              {itinerary.items.length === 0 ? (
-                <p style={{
-                  fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic",
-                  fontSize: 16, color: "var(--charcoal)", lineHeight: 1.5,
-                }}>
-                  Your selection is being curated — find us at the welcome desk on arrival.
-                </p>
-              ) : (
-                <Timeline items={itinerary.items} />
-              )}
-            </div>
           </div>
 
           {/* PERFORATION + STUB */}
@@ -2476,6 +2463,41 @@ function BoardingPassPhase({ participant, onReset }) {
             }}>gidf.abcdans.com</span>
             <span aria-hidden="true" style={{ marginLeft: 8 }}>→</span>
           </a>
+        </div>
+      </motion.div>
+
+      {/* YOUR TIMELINE — the personal schedule, separated from the boarding
+          pass credential. The pass above is for the desk; this is for the
+          participant. Marked print-extras so "Save your pass" mode hides it. */}
+      <motion.div {...fadeUp(0.55)} className="print-extras mt-12 mx-auto" style={{ maxWidth: 880 }}>
+        <div style={{ border: "1px solid var(--rule)", borderRadius: 18 }}>
+          <div className="p-6 sm:p-8">
+            <div className="flex items-baseline justify-between pb-3 mb-5 flex-wrap gap-3"
+              style={{ borderBottom: "0.5px solid var(--mist)" }}>
+              <h3 style={{
+                fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 500,
+                fontSize: "clamp(20px, 3vw, 26px)", lineHeight: 1.15, color: "#000", margin: 0,
+              }}>
+                Your full itinerary
+              </h3>
+              <span style={{
+                fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontWeight: 400,
+                fontSize: 14, color: "var(--vibrant-text)",
+              }}>
+                connecting flights, in order
+              </span>
+            </div>
+            {itinerary.items.length === 0 ? (
+              <p style={{
+                fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic",
+                fontSize: 16, color: "var(--charcoal)", lineHeight: 1.5,
+              }}>
+                Your selection is being curated — find us at the welcome desk on arrival.
+              </p>
+            ) : (
+              <Timeline items={itinerary.items} />
+            )}
+          </div>
         </div>
       </motion.div>
 
@@ -2649,65 +2671,145 @@ function PassStub({ participant, fromCode }) {
       </div>
 
       <div className="relative p-6 h-full flex flex-col justify-between" style={{ minHeight: 460 }}>
-        {/* TOP — admit count + "Pass covers" + name. admitCount > 1 for
-            multi-ticket OP / Gala buyers; defaults to 1 (renders "One")
-            for everyone else. The "Pass covers" block surfaces OP / Gala
-            entitlements at a glance — what the welcome desk needs first. */}
+        {/* TOP — Pass covers list (events with admit counts) + Passenger.
+            "Admit X" was confusing without context — replaced by per-event
+            counts. Each line shows what the pass admits to and how many. */}
         <div>
-          <Eyebrow color="#8A8A8A">Admit</Eyebrow>
-          <div style={{
-            fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 500,
-            fontSize: 32, lineHeight: 1, color: "#000", marginTop: 4,
-            letterSpacing: "-0.01em",
-          }}>
-            {(() => {
-              const n = participant.admitCount || 1;
-              if (n === 1) return "One";
-              if (n === 2) return "Two";
-              if (n === 3) return "Three";
-              if (n === 4) return "Four";
-              if (n === 5) return "Five";
-              return n; // Six+ rendered as numerals
-            })()}
-          </div>
-
-          {/* Pass covers — OP / Gala summary for the desk. Renders only when
-              the pass type is event-coded (OP-only / Gala Audience) OR the
-              participant has extra OP guests / gala tickets. */}
+          {/* Pass covers — bundled passes show a summary line ("Full Festival
+              workshops"); A la Carte enumerates each chosen workshop; OP-only
+              and Gala Audience show the primary event with admit count.
+              ABC dancers on Full Festival see their Tech & Tools Lab bonus.
+              Extras (op_guest_count, gala tickets) appear with "+ N". */}
           {(() => {
-            const isOPOnly       = participant.pass === "Opening Party Only";
-            const isGalaAudience = participant.pass === "Gala Audience";
-            const opGuestCount   = participant.opGuestCount || 0;
-            const galaTickets    = participant.galaTickets || 0;
+            const pass = participant.pass;
+            const isABC = participant.isABC;
+            const customWorkshops = participant.customWorkshops || [];
+            const addons = participant.addonWorkshops || [];
+            const opGuestCount = participant.opGuestCount || 0;
+            const galaTickets = participant.galaTickets || 0;
+            const admitCount = participant.admitCount || 1;
+
+            // Build the lines list. Order matters for visual flow:
+            // workshops → Tech Lab bonus → Opening Party → Gala Showcase.
             const lines = [];
-            if (isOPOnly)       lines.push({ event: "Opening Party",  prefix: "" });
-            if (isGalaAudience) lines.push({ event: "Gala Showcase",  prefix: "" });
-            if (opGuestCount > 0)
-              lines.push({ event: "Opening Party",  prefix: `+ ${opGuestCount} to ` });
-            if (galaTickets > 0)
-              lines.push({ event: "Gala Showcase",  prefix: `+ ${galaTickets} to ` });
+            const have = new Set();
+            const addLine = (key, label, opts = {}) => {
+              if (have.has(key)) return;
+              have.add(key);
+              lines.push({ key, label, count: opts.count || 0, tag: opts.tag });
+            };
+
+            if (pass === "Opening Party Only") {
+              addLine("openingParty", "Opening Party", { count: admitCount });
+            } else if (pass === "Gala Audience") {
+              addLine("gala", "Gala Showcase", { count: admitCount });
+            } else if (pass === "A la Carte Pass") {
+              customWorkshops.forEach(id => {
+                if (id === "openingParty") return; // handle in OP block below
+                addLine(id, SHORT_WORKSHOP_LABELS[id] || id);
+              });
+            } else if (pass === "Full Festival Pass") {
+              addLine("fullFestWorkshops", "Full Festival workshops");
+              if (isABC) addLine("techLab", "Tech & Tools Lab", { tag: "ABC BONUS" });
+            } else if (pass === "Friday Pass") {
+              addLine("fridayWorkshops", "Friday workshops");
+            } else if (pass === "Saturday Pass") {
+              addLine("satWorkshops", "Saturday workshops");
+            } else if (pass === "Sunday Pass") {
+              addLine("sunWorkshops", "Sunday workshops");
+            } else if (pass === "Discovery Pass") {
+              addLine("discoveryWorkshops", "Discovery workshops");
+            }
+
+            // Add-ons (Silva, Swati, Anellia, Elodie) — listed as individual
+            // extras even on bundled passes since they're paid extras.
+            addons.forEach(id => {
+              addLine(id, SHORT_WORKSHOP_LABELS[id] || id, { tag: "ADD-ON" });
+            });
+
+            // Opening Party. Sources of OP inclusion:
+            //   - Friday Pass / Full Festival Pass auto-include
+            //   - 'openingParty' in customWorkshops (Anne, Heidi, Shweta, A la Carte)
+            //   - Plus opGuestCount extras
+            let opCount = 0;
+            if (pass === "Friday Pass" || pass === "Full Festival Pass") opCount += 1;
+            if (customWorkshops.includes("openingParty")) opCount += 1;
+            if (pass !== "Opening Party Only") opCount += opGuestCount;
+            if (opCount > 0) {
+              addLine("openingParty", "Opening Party", { count: opCount });
+            }
+
+            // Gala — galaTickets sum (separate from Gala Audience pass).
+            if (pass !== "Gala Audience" && galaTickets > 0) {
+              addLine("gala", "Gala Showcase", { count: galaTickets });
+            }
+
+            // Chronological sort — by festival day + time. Summary lines
+            // ("Full Festival workshops" / "Friday workshops" / etc.) rank
+            // by their first scheduled workshop. ABC Tech Lab (Fri 12:00)
+            // therefore lands BEFORE "Full Festival workshops" (Fri 17:00).
+            const SORT_RANK = {
+              techLab:            { d: 0, t: 720 },   // Fri 12:00
+              bollyfolk:          { d: 0, t: 1020 },  // Fri 17:00
+              garba:              { d: 0, t: 1110 },  // Fri 18:30
+              openingParty:       { d: 0, t: 1170 },  // Fri 19:30
+              kuthu:              { d: 1, t: 540 },   // Sat 09:00
+              chhau:              { d: 1, t: 660 },   // Sat 11:00
+              giddha:             { d: 1, t: 810 },   // Sat 13:30
+              abhinaya:           { d: 1, t: 920 },   // Sat 15:20
+              gala:               { d: 1, t: 1200 },  // Sat 20:00
+              fusion:             { d: 2, t: 570 },   // Sun 09:30
+              desiAfro:           { d: 2, t: 660 },   // Sun 11:00
+              lavani:             { d: 2, t: 810 },   // Sun 13:30
+              cheraw:             { d: 2, t: 950 },   // Sun 15:50
+              // Bundle summaries — rank by their first workshop
+              fullFestWorkshops:  { d: 0, t: 1020 },  // first = bollyfolk Fri 17:00
+              fridayWorkshops:    { d: 0, t: 1020 },  // first = bollyfolk Fri 17:00
+              satWorkshops:       { d: 1, t: 540 },   // first = kuthu Sat 09:00
+              sunWorkshops:       { d: 2, t: 570 },   // first = fusion Sun 09:30
+              discoveryWorkshops: { d: 1, t: 660 },   // first = chhau Sat 11:00
+            };
+            const rankOf = (key) => {
+              const r = SORT_RANK[key];
+              return r ? r.d * 10000 + r.t : 999999;
+            };
+            lines.sort((a, b) => rankOf(a.key) - rankOf(b.key));
+
             if (lines.length === 0) return null;
             return (
-              <div className="mt-4 pt-3" style={{ borderTop: "0.5px solid var(--mist)" }}>
+              <div>
                 <Eyebrow color="#8A8A8A">Pass covers</Eyebrow>
-                <div className="mt-1.5">
+                <div className="mt-2">
                   {lines.map((line, i) => (
-                    <div key={i} style={{
-                      fontFamily: "'Playfair Display', Georgia, serif",
-                      fontStyle: line.prefix ? "normal" : "italic",
-                      fontSize: 14, lineHeight: 1.45, color: "#000",
-                      marginTop: i === 0 ? 0 : 2,
-                    }}>
-                      {line.prefix && (
+                    <div key={i} className="flex items-baseline justify-between gap-3"
+                      style={{ marginTop: i === 0 ? 0 : 4, paddingBottom: 2 }}>
+                      <span style={{
+                        fontFamily: "'Playfair Display', Georgia, serif",
+                        fontWeight: 500,
+                        fontSize: 15, lineHeight: 1.35, color: "#000",
+                        flex: "1 1 auto", minWidth: 0,
+                      }}>
+                        {line.label}
+                        {line.tag && (
+                          <span style={{
+                            fontFamily: "Inter, sans-serif", fontWeight: 500, fontSize: 9,
+                            letterSpacing: "0.18em", textTransform: "uppercase",
+                            color: line.tag === "ABC BONUS" ? "var(--goldenrod-text)" : "var(--mute)",
+                            marginLeft: 6,
+                          }}>{line.tag}</span>
+                        )}
+                      </span>
+                      {line.count > 1 && (
                         <span style={{
-                          fontFamily: "Inter, sans-serif",
-                          fontWeight: 500, fontSize: 12,
-                          color: "var(--vibrant-text)",
-                          letterSpacing: "0.02em",
-                          marginRight: 4,
-                        }}>{line.prefix}</span>
+                          fontFamily: "Inter, sans-serif", fontWeight: 600,
+                          fontSize: 13, color: "var(--vibrant-text)",
+                          letterSpacing: "0.01em", whiteSpace: "nowrap",
+                        }}>
+                          {/* "× N" reads as "N tickets" / "admits N" — */}
+                          {/* unambiguous total count (vs "+N" which could read as "plus N more"). */}
+                          × {line.count}
+                        </span>
                       )}
-                      {line.event}
                     </div>
                   ))}
                 </div>
@@ -2715,7 +2817,7 @@ function PassStub({ participant, fromCode }) {
             );
           })()}
 
-          <div className="mt-6">
+          <div className="mt-7">
             <Eyebrow color="#8A8A8A">Passenger</Eyebrow>
             <div className="mt-1" style={{
               fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 500,
