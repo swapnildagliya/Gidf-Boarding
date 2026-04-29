@@ -131,6 +131,40 @@
     from { offset-distance: 0%;   -webkit-offset-distance: 0%;   }
     to   { offset-distance: 100%; -webkit-offset-distance: 100%; }
   }
+
+  /* Print / save-as-PDF support — two modes:
+       body.print-pass-only → only the airline-ticket card prints
+       body.print-full      → pass + Flight Conditions + Heads Up
+     Buttons themselves carry .no-print so they never appear on paper.
+     Drop shadow + rounded corners on the card both print acceptably
+     in modern Chromium/Safari/Firefox. Page margins are conservative. */
+  @media print {
+    @page { margin: 1.2cm; }
+    body { background: #FFFFFF !important; }
+    /* Hide controls, dev affordances, anything not part of the pass content */
+    .no-print { display: none !important; }
+    /* Trim padding so a single pass fits one page */
+    section { padding-top: 8px !important; padding-bottom: 8px !important; }
+    /* Keep the pass card together, kill the drop shadow on print so the
+       saffron ribbon is the visual anchor, not a grey halo. */
+    .pass-card {
+      break-inside: avoid;
+      page-break-inside: avoid;
+      box-shadow: none !important;
+    }
+    /* Avoid AnimatePresence opacity-0 freeze on saved pages */
+    [style*="opacity: 0"] { opacity: 1 !important; }
+  }
+  @media print {
+    /* "Save your pass" hides:
+       - .print-extras  → Flight Conditions + Heads Up sections after the card
+       - .pass-detail   → the workshop timeline inside the card (a credential,
+                          not a multi-leg itinerary). The card remains: name,
+                          nickname, ABC badge, dateband, From/To, pass type,
+                          stub with QR + barcode + From-To-Date. */
+    body.print-pass-only .print-extras,
+    body.print-pass-only .pass-detail { display: none !important; }
+  }
 </style>
 </head>
 <body>
@@ -393,8 +427,43 @@ function computeItinerary(participant) {
 /* ============================================================
    5. ORIGIN HELPERS  — origin code/country come from Supabase pre-derived
    (see 002_phone_redaction.sql). Phone numbers never enter the JS.
+
+   ABC_HOME_OVERRIDES — a special touch for ABC dancers whose phones live
+   in Belgium/elsewhere but whose home cities are in India. Their boarding
+   pass departs from their Indian home city, with the right landmark, label
+   and airport code. Keyed by Shoonya ID. Only set for ABC dancers Swapnil
+   has explicitly named — others fall through to phone-derived origin.
    ============================================================ */
+const ABC_HOME_OVERRIDES = {
+  "1248": { code: "IN-JPR", country: "India",  city: "Jaipur",  airport: "JAI" }, // Khushboo
+  "1275": { code: "IN-BOM", country: "India",  city: "Mumbai",  airport: "BOM" }, // Shreya
+  "1245": { code: "IN-BOM", country: "India",  city: "Mumbai",  airport: "BOM" }, // Roshni
+  "1243": { code: "IN-MAA", country: "India",  city: "Chennai", airport: "MAA" }, // Kaushika
+  "1247": { code: "IT-ROM", country: "Italy",  city: "Rome",    airport: "FCO" }, // Chiara
+  "1119": { code: "RU-MOW", country: "Russia", city: "Moscow",  airport: "SVO" }, // Svetlana
+};
+
+/* ABC_NICKNAMES — playful Bollywood-song stage names assigned by the team.
+   A small highlight under the dancer's name on the boarding pass. Keyed by
+   Shoonya ID. Haike's nickname is pending — Swapnil will fill it in. */
+const ABC_NICKNAMES = {
+  "1000": "Ramta Jogi",            // Swapnil
+  "1251": "Manmohini",             // Laurien
+  "1243": "Radha on the Dance Floor", // Kaushika
+  "1276": "Masakali",              // Sara
+  "1246": "Sweety Tera Drama",     // Narcisse
+  "1247": "Señorita",              // Chiara
+  "1275": "Apsara Aali",           // Shreya
+  "1248": "Billo Rani",            // Khushboo
+  "1245": "Ghani Bawri",           // Roshni
+  "1620": "Albeli",                // Maha (Srimahavalli)
+  "1119": "Hawa Hawai",            // Svetlana (Charter Pass)
+  "1250": "Kho Gaye Hum Kahan",    // Haike — lost, on her phone, always late
+};
+
 function originFromMatch(p) {
+  const ov = ABC_HOME_OVERRIDES[p.id];
+  if (ov) return { code: ov.code, country: ov.country, city: ov.city };
   return {
     code:    p.originCode    || "—",
     country: p.originCountry || "Worldwide",
@@ -683,7 +752,7 @@ const Landmark = ({ code, color = "#E85D1F", height = 110 }) => {
     </svg>
   );
 
-  if (code === "IT") return (
+  if (code === "IT" || code === "IT-ROM") return (
     <svg viewBox="0 0 200 150" style={{ height: height * 0.85, width: "auto" }} {...common}>
       {/* Colosseum — half-ellipse outer wall with rows of arches */}
       <line x1="5" y1="135" x2="195" y2="135" />
@@ -740,6 +809,179 @@ const Landmark = ({ code, color = "#E85D1F", height = 110 }) => {
     </svg>
   );
 
+  // ─────────── ABC dancer home overrides — Russia, Italy, India ───────────
+  if (code === "RU-MOW") return (
+    /* Saint Basil's Cathedral — Moscow, Red Square. Iconic onion-dome
+       silhouette: tall central tent-roofed tower flanked by four onion
+       domes at varying heights. Hairline rendering. */
+    <svg viewBox="0 0 220 200" style={{ height, width: "auto" }} {...common}>
+      {/* ground + base steps */}
+      <path d="M 5 196 L 215 196" strokeWidth={sw * 0.5} opacity="0.4" />
+      <path d="M 14 188 L 206 188 L 206 192 L 14 192 Z" />
+      {/* Main church body — broad rectangular base */}
+      <path d="M 28 188 L 28 130 L 192 130 L 192 188" />
+      {/* Arched windows on body */}
+      <path d="M 50 188 L 50 168 Q 50 156 60 156 Q 70 156 70 168 L 70 188" strokeWidth={sw * 0.7} />
+      <path d="M 100 188 L 100 168 Q 100 156 110 156 Q 120 156 120 168 L 120 188" strokeWidth={sw * 0.7} />
+      <path d="M 150 188 L 150 168 Q 150 156 160 156 Q 170 156 170 168 L 170 188" strokeWidth={sw * 0.7} />
+      {/* Front-left large onion dome */}
+      <path d="M 32 130 L 32 110" />
+      <path d="M 30 110 Q 22 92 32 80 Q 46 66 46 56 Q 46 66 60 80 Q 70 92 62 110 Z" />
+      <line x1="46" y1="56" x2="46" y2="42" strokeWidth={sw * 0.8} />
+      <path d="M 41 46 L 51 46" strokeWidth={sw * 0.7} />
+      {/* Front-right large onion dome */}
+      <path d="M 188 130 L 188 110" />
+      <path d="M 158 110 Q 150 92 160 80 Q 174 66 174 56 Q 174 66 188 80 Q 198 92 190 110 Z" />
+      <line x1="174" y1="56" x2="174" y2="42" strokeWidth={sw * 0.8} />
+      <path d="M 169 46 L 179 46" strokeWidth={sw * 0.7} />
+      {/* Mid-left smaller onion */}
+      <path d="M 78 130 L 78 108" />
+      <path d="M 70 108 Q 64 92 74 84 Q 84 74 84 66 Q 84 74 94 84 Q 104 92 98 108 Z" />
+      <line x1="84" y1="66" x2="84" y2="56" strokeWidth={sw * 0.7} />
+      <path d="M 80 60 L 88 60" strokeWidth={sw * 0.6} />
+      {/* Mid-right smaller onion */}
+      <path d="M 142 130 L 142 108" />
+      <path d="M 122 108 Q 116 92 126 84 Q 136 74 136 66 Q 136 74 146 84 Q 156 92 150 108 Z" />
+      <line x1="136" y1="66" x2="136" y2="56" strokeWidth={sw * 0.7} />
+      <path d="M 132 60 L 140 60" strokeWidth={sw * 0.6} />
+      {/* Central tall tent-roof tower */}
+      <path d="M 100 130 L 100 78 L 130 78 L 130 130" />
+      {/* Tower windows */}
+      <path d="M 108 124 L 108 110 L 122 110 L 122 124 Z" strokeWidth={sw * 0.5} opacity="0.7" />
+      <path d="M 108 100 L 108 88 L 122 88 L 122 100 Z" strokeWidth={sw * 0.5} opacity="0.7" />
+      {/* Tent-roof spire (octagonal pyramid look) */}
+      <path d="M 96 78 L 115 36 L 134 78" />
+      <path d="M 96 78 L 134 78" />
+      <path d="M 105 60 L 125 60" strokeWidth={sw * 0.5} opacity="0.6" />
+      {/* Small onion at top of tent + cross */}
+      <path d="M 110 36 Q 105 28 110 22 Q 120 28 115 36 Z" />
+      <line x1="115" y1="22" x2="115" y2="14" strokeWidth={sw * 0.8} />
+      <path d="M 111 17 L 119 17" strokeWidth={sw * 0.7} />
+      <line x1="115" y1="10" x2="115" y2="14" strokeWidth={sw * 0.7} />
+      {/* Decorative spirals on the bigger onions — hint at the multi-colored
+          stripes without going full chromatic. Hairline arcs only. */}
+      <g strokeWidth={sw * 0.4} opacity="0.55" fill="none">
+        <path d="M 32 102 Q 38 96 46 96 Q 54 96 60 102" />
+        <path d="M 32 92 Q 38 86 46 86 Q 54 86 60 92" />
+        <path d="M 160 102 Q 166 96 174 96 Q 182 96 188 102" />
+        <path d="M 160 92 Q 166 86 174 86 Q 182 86 188 92" />
+      </g>
+    </svg>
+  );
+
+  // ─────────── Indian city landmarks (ABC dancer home overrides) ───────────
+  if (code === "IN-JPR") return (
+    /* Hawa Mahal — Jaipur "Palace of Winds". Five tiers of arched windows
+       in a honeycomb facade. Hairline rendering. */
+    <svg viewBox="0 0 220 200" style={{ height, width: "auto" }} {...common}>
+      <path d="M 10 188 L 210 188 L 210 178 L 10 178 Z" />
+      <path d="M 22 178 L 22 156 L 198 156 L 198 178" />
+      <path d="M 30 156 L 30 132 L 190 132 L 190 156" />
+      <path d="M 40 132 L 40 108 L 180 108 L 180 132" />
+      <path d="M 52 108 L 52 84 L 168 84 L 168 108" />
+      <path d="M 64 84 L 64 60 L 156 60 L 156 84" />
+      <path d="M 32 175 Q 36 165 40 175 M 50 175 Q 54 165 58 175 M 68 175 Q 72 165 76 175 M 86 175 Q 90 165 94 175 M 104 175 Q 108 165 112 175 M 122 175 Q 126 165 130 175 M 140 175 Q 144 165 148 175 M 158 175 Q 162 165 166 175 M 176 175 Q 180 165 184 175" />
+      <path d="M 42 153 Q 46 143 50 153 M 60 153 Q 64 143 68 153 M 78 153 Q 82 143 86 153 M 96 153 Q 100 143 104 153 M 114 153 Q 118 143 122 153 M 132 153 Q 136 143 140 153 M 150 153 Q 154 143 158 153 M 168 153 Q 172 143 176 153" />
+      <path d="M 50 129 Q 54 119 58 129 M 68 129 Q 72 119 76 129 M 86 129 Q 90 119 94 129 M 104 129 Q 108 119 112 129 M 122 129 Q 126 119 130 129 M 140 129 Q 144 119 148 129 M 158 129 Q 162 119 166 129" />
+      <path d="M 60 105 Q 64 95 68 105 M 78 105 Q 82 95 86 105 M 96 105 Q 100 95 104 105 M 114 105 Q 118 95 122 105 M 132 105 Q 136 95 140 105 M 150 105 Q 154 95 158 105" />
+      <path d="M 72 81 Q 76 71 80 81 M 90 81 Q 94 71 98 81 M 108 81 Q 112 71 116 81 M 126 81 Q 130 71 134 81 M 144 81 Q 148 71 152 81" />
+      <path d="M 100 60 L 100 48 L 120 48 L 120 60" />
+      <path d="M 96 48 Q 110 30 124 48" />
+      <path d="M 110 30 L 110 22" />
+      <circle cx="110" cy="20" r="1.6" fill={color} />
+      <path d="M 64 60 L 64 52 L 70 52 L 70 60" />
+      <path d="M 150 60 L 150 52 L 156 52 L 156 60" />
+      <path d="M 5 196 L 215 196" strokeWidth={sw * 0.5} opacity="0.4" />
+    </svg>
+  );
+
+  if (code === "IN-BOM") return (
+    /* Gateway of India — Mumbai. Indo-Saracenic monument: tall central
+       arch flanked by lower bays, large central dome, four corner
+       chhatris, broad plinth, faint sea-line below. */
+    <svg viewBox="0 0 220 200" style={{ height, width: "auto" }} {...common}>
+      <path d="M 8 188 L 212 188 L 212 192 L 8 192 Z" />
+      <path d="M 14 180 L 206 180 L 206 188 L 14 188 Z" />
+      <path d="M 18 180 L 18 132 L 54 132 L 54 180" />
+      <path d="M 166 180 L 166 132 L 202 132 L 202 180" />
+      <path d="M 26 145 L 32 145 L 32 162 L 26 162 Z M 40 145 L 46 145 L 46 162 L 40 162 Z" />
+      <path d="M 174 145 L 180 145 L 180 162 L 174 162 Z M 188 145 L 194 145 L 194 162 L 188 162 Z" />
+      <path d="M 18 132 L 18 124 L 54 124 L 54 132" />
+      <path d="M 166 132 L 166 124 L 202 124 L 202 132" />
+      <ellipse cx="36" cy="118" rx="10" ry="4" />
+      <path d="M 28 118 Q 36 108 44 118" />
+      <line x1="36" y1="106" x2="36" y2="98" />
+      <circle cx="36" cy="96" r="1.5" fill={color} />
+      <ellipse cx="184" cy="118" rx="10" ry="4" />
+      <path d="M 176 118 Q 184 108 192 118" />
+      <line x1="184" y1="106" x2="184" y2="98" />
+      <circle cx="184" cy="96" r="1.5" fill={color} />
+      <path d="M 54 180 L 54 92 L 166 92 L 166 180" />
+      <path d="M 76 180 L 76 138 Q 76 110 110 110 Q 144 110 144 138 L 144 180" />
+      <path d="M 60 102 L 160 102" strokeWidth={sw * 0.5} />
+      <path d="M 54 92 L 54 84 L 166 84 L 166 92" />
+      <path d="M 78 84 Q 78 50 110 50 Q 142 50 142 84" />
+      <path d="M 78 84 L 142 84" />
+      <line x1="110" y1="50" x2="110" y2="38" strokeWidth={sw * 0.7} />
+      <circle cx="110" cy="36" r="2" fill={color} />
+      <ellipse cx="66" cy="82" rx="9" ry="5" />
+      <line x1="66" y1="77" x2="66" y2="68" strokeWidth={sw * 0.6} />
+      <ellipse cx="154" cy="82" rx="9" ry="5" />
+      <line x1="154" y1="77" x2="154" y2="68" strokeWidth={sw * 0.6} />
+      <path d="M 84 138 Q 84 116 110 116 Q 136 116 136 138" strokeWidth={sw * 0.5} opacity="0.6" />
+      <path d="M 0 192 L 220 192" strokeWidth={sw * 0.5} opacity="0.5" />
+      <path d="M 0 198 Q 30 196 60 198 T 120 198 T 180 198 T 220 198" strokeWidth={sw * 0.4} opacity="0.35" />
+    </svg>
+  );
+
+  if (code === "IN-MAA") return (
+    /* Kapaleeshwarar Temple gopuram — Mylapore, Chennai. South Indian
+       temple tower: stepped pyramidal silhouette tapering toward the top,
+       crowned with a row of kalashas (gold finial pots). */
+    <svg viewBox="0 0 220 200" style={{ height, width: "auto" }} {...common}>
+      {/* ground + base platform */}
+      <path d="M 5 196 L 215 196" strokeWidth={sw * 0.5} opacity="0.4" />
+      <path d="M 26 188 L 194 188 L 194 178 L 26 178 Z" />
+      {/* tier 1 (lowest, widest) — with a central entrance arch */}
+      <path d="M 30 178 L 30 142 L 190 142 L 190 178" />
+      <path d="M 30 146 L 190 146" />
+      <path d="M 100 178 L 100 158 Q 100 148 110 148 Q 120 148 120 158 L 120 178" />
+      {/* tier 2 */}
+      <path d="M 38 142 L 38 116 L 182 116 L 182 142" />
+      <path d="M 38 120 L 182 120" />
+      {/* tier 3 */}
+      <path d="M 48 116 L 48 92 L 172 92 L 172 116" />
+      <path d="M 48 96 L 172 96" />
+      {/* tier 4 */}
+      <path d="M 58 92 L 58 70 L 162 70 L 162 92" />
+      <path d="M 58 74 L 162 74" />
+      {/* tier 5 */}
+      <path d="M 70 70 L 70 50 L 150 50 L 150 70" />
+      <path d="M 70 54 L 150 54" />
+      {/* shikhara (top crown — barrel-vault shape) */}
+      <path d="M 82 50 L 82 36 L 138 36 L 138 50" />
+      <path d="M 78 36 Q 110 24 142 36" />
+      <path d="M 78 36 L 142 36" />
+      {/* row of kalashas (finials) along the roof ridge */}
+      <line x1="92" y1="30" x2="92" y2="22" strokeWidth={sw * 0.7} />
+      <circle cx="92" cy="20" r="1.8" fill={color} />
+      <line x1="106" y1="29" x2="106" y2="18" strokeWidth={sw * 0.7} />
+      <circle cx="106" cy="16" r="2.2" fill={color} />
+      <line x1="120" y1="28" x2="120" y2="14" strokeWidth={sw * 0.7} />
+      <circle cx="120" cy="12" r="2.6" fill={color} />
+      <line x1="134" y1="29" x2="134" y2="18" strokeWidth={sw * 0.7} />
+      <circle cx="134" cy="16" r="2.2" fill={color} />
+      <line x1="148" y1="30" x2="148" y2="22" strokeWidth={sw * 0.7} />
+      <circle cx="148" cy="20" r="1.8" fill={color} />
+      {/* small carved-figure suggestions on each tier (hairline rectangles) */}
+      <g strokeWidth={sw * 0.5} opacity="0.7">
+        <path d="M 44 156 L 48 156 L 48 168 L 44 168 Z M 56 156 L 60 156 L 60 168 L 56 168 Z M 68 156 L 72 156 L 72 168 L 68 168 Z M 148 156 L 152 156 L 152 168 L 148 168 Z M 160 156 L 164 156 L 164 168 L 160 168 Z M 172 156 L 176 156 L 176 168 L 172 168 Z" />
+        <path d="M 52 130 L 56 130 L 56 138 L 52 138 Z M 64 130 L 68 130 L 68 138 L 64 138 Z M 76 130 L 80 130 L 80 138 L 76 138 Z M 140 130 L 144 130 L 144 138 L 140 138 Z M 152 130 L 156 130 L 156 138 L 152 138 Z M 164 130 L 168 130 L 168 138 L 164 138 Z" />
+        <path d="M 60 106 L 64 106 L 64 112 L 60 112 Z M 72 106 L 76 106 L 76 112 L 72 112 Z M 144 106 L 148 106 L 148 112 L 144 112 Z M 156 106 L 160 106 L 160 112 L 156 112 Z" />
+      </g>
+    </svg>
+  );
+
   // Default — globe
   return (
     <svg viewBox="0 0 100 100" style={{ height: height * 0.7, width: "auto" }} {...common}>
@@ -762,6 +1004,12 @@ const LandmarkLabel = {
   IT: "Italy",
   SC: "Seychelles",
   WW: "the world",
+  // ABC dancer home-city overrides
+  "IN-JPR": "Hawa Mahal · Jaipur",
+  "IN-BOM": "Gateway of India · Mumbai",
+  "IN-MAA": "Kapaleeshwarar · Chennai",
+  "IT-ROM": "Colosseo · Rome",
+  "RU-MOW": "Saint Basil's · Moscow",
 };
 
 /* ============================================================
@@ -1048,8 +1296,14 @@ function TransitPhase({ participant, onSkip }) {
 }
 
 function airportCode(c) {
-  // Closest international airport per country code (display only).
-  return ({ NL: "AMS", BE: "BRU", FR: "CDG", UK: "LHR", CH: "ZRH", LU: "LUX", WW: "—" })[c] || "—";
+  // Closest international airport per country/city code (display only).
+  return ({
+    NL: "AMS", BE: "BRU", FR: "CDG", UK: "LHR", CH: "ZRH", LU: "LUX", WW: "—",
+    IT: "FCO", SC: "SEZ",
+    // ABC dancer home cities
+    "IN-JPR": "JAI", "IN-BOM": "BOM", "IN-MAA": "MAA",
+    "IT-ROM": "FCO", "RU-MOW": "SVO",
+  })[c] || "—";
 }
 
 function AirportBadge({ code, label, highlight }) {
@@ -1106,7 +1360,9 @@ function TransitArc({ origin }) {
       <motion.text x={A.x} y={A.y + 38} textAnchor="middle"
         fontFamily="Inter, sans-serif" fontSize="11" fontWeight="500" fill="#4A4A4A" letterSpacing="2"
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.7, duration: 0.5 }}>
-        {origin.country.toUpperCase()}
+        {/* Show the city if it's an ABC home override (Jaipur/Mumbai/Chennai),
+            otherwise the country (Belgium / France / etc). */}
+        {(origin.city || origin.country).toUpperCase()}
       </motion.text>
 
       {/* Ghent skyline at destination */}
@@ -1375,6 +1631,22 @@ function TourPhase({ onContinue }) {
     return () => clearTimeout(t);
   }, []);
 
+  // Auto-advance ~1.2s after the video ends so the user isn't stuck if the
+  // Continue button is below the fold on smaller viewports.
+  useEffect(() => {
+    if (!ended) return;
+    const t = setTimeout(() => onContinue(), 1200);
+    return () => clearTimeout(t);
+  }, [ended, onContinue]);
+
+  // Reduce-motion users see the poster, no autoplay → no onEnded fires.
+  // Give them a 4s look-then-go fallback; SkipControl is also visible.
+  useEffect(() => {
+    if (!reduceMotion) return;
+    const t = setTimeout(() => onContinue(), 4000);
+    return () => clearTimeout(t);
+  }, [reduceMotion, onContinue]);
+
   const togglePlay = () => {
     const v = videoRef.current;
     if (!v) return;
@@ -1383,7 +1655,7 @@ function TourPhase({ onContinue }) {
   };
 
   return (
-    <section className="min-h-screen flex flex-col items-center justify-center px-4 sm:px-6 py-10">
+    <section className="relative min-h-screen flex flex-col items-center justify-center px-4 sm:px-6 py-10">
       <motion.div {...fadeUp(0)} className="mb-3">
         <Eyebrow>30-second tour</Eyebrow>
       </motion.div>
@@ -1484,6 +1756,11 @@ function TourPhase({ onContinue }) {
         }}>
         {ended ? "Continue →" : "Skip the tour →"}
       </motion.button>
+
+      {/* Guaranteed bottom-right escape hatch — visible regardless of
+          viewport, matches every other phase. Same handler as the
+          mid-page CTA. */}
+      <SkipControl onSkip={onContinue} label="Skip" color="#6B6B6B" delay={1.2} />
     </section>
   );
 }
@@ -1855,6 +2132,21 @@ function BoardingPassPhase({ participant, onReset }) {
   const gala = { count: participant.galaTickets || 0 };
   const fromCode = airportCode(origin.code);
 
+  // Two-mode save/print. Toggles a body class so the @media print rules know
+  // which sections to suppress, then triggers the browser's print dialog
+  // (which on every platform offers "Save as PDF"). Cleans up after the dialog
+  // closes so the on-screen layout is unaffected.
+  const savePass = (mode) => {
+    const cls = mode === "pass" ? "print-pass-only" : "print-full";
+    document.body.classList.add(cls);
+    const cleanup = () => {
+      document.body.classList.remove("print-pass-only", "print-full");
+      window.removeEventListener("afterprint", cleanup);
+    };
+    window.addEventListener("afterprint", cleanup);
+    setTimeout(() => window.print(), 50);
+  };
+
   return (
     <section className="px-4 sm:px-6 py-12 sm:py-16 mx-auto" style={{ maxWidth: 980 }}>
       {/* Hero copy — h2 (the gate's "Welcome to the festival." remains the only h1 in the journey) */}
@@ -1880,7 +2172,7 @@ function BoardingPassPhase({ participant, onReset }) {
             tropes (rounded corners + drop shadow) by explicit design decision
             (Apr 27, Swapnil). The rest of the journey stays Shoonya-strict. */}
         <div
-          className="relative bg-white flex flex-col"
+          className="relative bg-white flex flex-col pass-card"
           style={{
             borderRadius: 18,
             border: "1px solid var(--rule)",
@@ -1940,6 +2232,22 @@ function BoardingPassPhase({ participant, onReset }) {
                     color: "#000", background: "var(--goldenrod)", padding: "3px 7px",
                   }}>
                     ABC dancer
+                  </span>
+                )}
+                {/* Stage-name highlight — a playful Bollywood-song moniker for
+                    ABC dancers. Italic Playfair in saffron, sits as a sibling
+                    of the name so flex-wrap drops it onto its own line cleanly. */}
+                {ABC_NICKNAMES[participant.id] && (
+                  <span style={{
+                    flexBasis: "100%",
+                    fontFamily: "'Playfair Display', Georgia, serif",
+                    fontStyle: "italic", fontWeight: 400,
+                    fontSize: 17, color: "var(--vibrant-text)",
+                    letterSpacing: "0.005em",
+                    marginTop: 4,
+                  }}>
+                    <span aria-hidden="true" style={{ marginRight: 6, opacity: 0.7 }}>·</span>
+                    {ABC_NICKNAMES[participant.id]}
                   </span>
                 )}
                 {itinerary.opPerformer && (
@@ -2007,8 +2315,10 @@ function BoardingPassPhase({ participant, onReset }) {
               />
             </div>
 
-            {/* TIMELINE */}
-            <div className="mt-10">
+            {/* TIMELINE — class pass-detail so "Save your pass" mode hides
+                it (a real airline boarding pass is a credential, not a
+                multi-leg itinerary). Visible in "Save full itinerary" mode. */}
+            <div className="pass-detail mt-10">
               <div className="flex items-baseline justify-between pb-3 mb-5 flex-wrap gap-3"
                 style={{ borderBottom: "0.5px solid var(--mist)" }}>
                 <h3 style={{
@@ -2072,18 +2382,47 @@ function BoardingPassPhase({ participant, onReset }) {
         </div>
       </motion.div>
 
+      {/* SAVE / PRINT — two modes. Pass-only is sized for A6-ish, full
+          itinerary is A4-friendly. Browsers offer "Save as PDF" natively
+          on iOS, Android, macOS and Windows. The buttons themselves
+          carry no-print so they never appear in the saved output. */}
+      <motion.div {...fadeUp(0.6)} className="no-print mt-10 flex flex-wrap items-center justify-center gap-3">
+        <button onClick={() => savePass("pass")}
+          aria-label="Save just the boarding pass card"
+          style={{
+            fontFamily: "Inter, sans-serif", fontSize: 12, fontWeight: 500,
+            letterSpacing: "0.18em", textTransform: "uppercase",
+            color: "var(--vibrant-text)", background: "transparent",
+            border: "1px solid var(--vibrant-text)",
+            padding: "12px 20px", cursor: "pointer", minHeight: 44,
+          }}>
+          Save your pass
+        </button>
+        <button onClick={() => savePass("full")}
+          aria-label="Save the full itinerary including Flight Conditions and Heads Up"
+          style={{
+            fontFamily: "Inter, sans-serif", fontSize: 12, fontWeight: 500,
+            letterSpacing: "0.18em", textTransform: "uppercase",
+            color: "var(--mute)", background: "transparent",
+            border: "0.5px solid var(--mist)",
+            padding: "12px 20px", cursor: "pointer", minHeight: 44,
+          }}>
+          Save full itinerary
+        </button>
+      </motion.div>
+
       {/* FLIGHT CONDITIONS */}
-      <motion.div {...fadeUp(0.7)} className="mt-12 mx-auto" style={{ maxWidth: 880 }}>
+      <motion.div {...fadeUp(0.7)} className="print-extras mt-12 mx-auto" style={{ maxWidth: 880 }}>
         <FlightConditions />
       </motion.div>
 
       {/* HEADS UP — separate tickets */}
-      <motion.div {...fadeUp(0.9)} className="mt-12 mx-auto" style={{ maxWidth: 880 }}>
+      <motion.div {...fadeUp(0.9)} className="print-extras mt-12 mx-auto" style={{ maxWidth: 880 }}>
         <HeadsUp itinerary={itinerary} />
       </motion.div>
 
       {/* Foot — reset link with full 44×44 hit area for touch */}
-      <motion.div {...fadeUp(1.05)} className="mt-12 text-center">
+      <motion.div {...fadeUp(1.05)} className="no-print mt-12 text-center">
         <button onClick={onReset}
           aria-label="Step back to the gate and search for another participant"
           style={{
