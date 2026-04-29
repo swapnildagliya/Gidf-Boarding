@@ -1263,13 +1263,16 @@ function GatePhase({ query, setQuery, error, onEnter }) {
         </motion.p>
 
         <motion.div {...fadeUp(0.34)}>
-          <div className="flex items-center" style={{
+          {/* items-stretch + matching px on input/button so the saffron Step-in
+              button fills the row height exactly and aligns inside the
+              container's bottom border (was overflowing on mobile). */}
+          <div className="flex items-stretch" style={{
             borderTop: "0.5px solid var(--mist)",
             borderBottom: error ? "1px solid var(--vibrant)" : "1px solid var(--ink)",
             borderLeft: "0.5px solid var(--mist)", borderRight: "0.5px solid var(--mist)",
             background: "var(--paper)",
           }}>
-            <SearchIcon className="w-4 h-4 ml-4 flex-shrink-0" style={{ color: "var(--mute)" }} />
+            <SearchIcon className="w-4 h-4 ml-4 flex-shrink-0 self-center" style={{ color: "var(--mute)" }} />
             <input type="text" value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && onEnter()}
@@ -1279,7 +1282,7 @@ function GatePhase({ query, setQuery, error, onEnter }) {
               className="flex-1 bg-transparent outline-none px-3 py-4"
               style={{ fontSize: 15, color: "var(--ink)", fontFamily: "Inter, sans-serif", fontWeight: 400 }} />
             <button onClick={onEnter} aria-label="Step into the festival"
-              className="flex-shrink-0 flex items-center gap-2 px-5 py-4 transition-opacity hover:opacity-80"
+              className="flex-shrink-0 flex items-center gap-2 px-5 transition-opacity hover:opacity-80"
               style={{
                 /* AA-compliant saffron: white-on-#C44715 = 4.55:1 at 13px */
                 color: "var(--paper)", background: "var(--vibrant-text)", fontFamily: "Inter, sans-serif", fontWeight: 500,
