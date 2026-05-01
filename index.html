@@ -409,7 +409,14 @@ const PASS_RIBBON = {
 function computeItinerary(participant) {
   const items = [];
   const seen = new Set();
-  const opSlot = participant.opPerformer || null;
+  // opPerformer can be an ARRAY of {block, solo, with} (new schema, supports
+  // multiple performances — Nikta does both 21:00 solo + 21:45 Bollybandits)
+  // OR a single object (legacy single-performance) OR null. Normalise to array.
+  const opPerf = participant.opPerformer;
+  const opSlots = Array.isArray(opPerf)
+    ? opPerf
+    : (opPerf ? [opPerf] : []);
+  const opSlot = opSlots[0] || null;  // primary slot (earliest by block)
 
   // ABC bonus — Tech & Tools Lab is auto-included for ABC dancers who hold
   // a Full Festival Pass (Zoho doesn't enrol ABC into the Lab automatically).
@@ -441,6 +448,10 @@ function computeItinerary(participant) {
   if (includesOP) {
     items.push({
       ...OPENING_PARTY,
+      // Pass the full array of performance slots so multi-block performers
+      // (Nikta: 21:00 solo + 21:45 Bollybandits) render every slot.
+      performerSlots: opSlots,
+      // Keep these single-value fields for backward compat / fallback:
       performerSlot: opSlot ? opSlot.block : null,
       performerWith: opSlot && !opSlot.solo ? (opSlot.with || null) : null,
       opGuestCount: participant.opGuestCount || 0,
@@ -488,7 +499,8 @@ function computeItinerary(participant) {
     // workshop, no need to upsell Gala or the Lab they've already booked.
     hasGalaCallout: !isGalaAudience && !isTechLabOnly && (galaTickets > 0 || !isOPOnly),
     hasTechLabCallout: !hasTechLab && !isOPOnly && !isGalaAudience && !isTechLabOnly,
-    opPerformer: opSlot,
+    opPerformer: opSlot,       // primary slot (header badge fallback)
+    opPerformers: opSlots,     // full array — render all slots
   };
 }
 
@@ -2410,14 +2422,14 @@ function BoardingPassPhase({ participant, onReset }) {
                     {ABC_NICKNAMES[participant.id]}
                   </span>
                 )}
-                {itinerary.opPerformer && (
+                {itinerary.opPerformers && itinerary.opPerformers.length > 0 && (
                   <span style={{
                     fontSize: 10, letterSpacing: "0.18em", textTransform: "uppercase",
                     fontFamily: "Inter, sans-serif", fontWeight: 500,
                     /* AA-compliant: white-on-#C44715 = 4.55:1 at 10px */
                     color: "var(--paper)", background: "var(--vibrant-text)", padding: "3px 7px",
                   }}>
-                    On stage · {itinerary.opPerformer.block} block
+                    On stage · {itinerary.opPerformers.map(s => s.block).join(" + ")} block
                   </span>
                 )}
               </div>
@@ -2833,22 +2845,29 @@ function PassStub({ participant, fromCode }) {
                   {lines.map((line, i) => (
                     <div key={i} className="flex items-baseline justify-between gap-3"
                       style={{ marginTop: i === 0 ? 0 : 4, paddingBottom: 2 }}>
-                      <span style={{
-                        fontFamily: "'Playfair Display', Georgia, serif",
-                        fontWeight: 500,
-                        fontSize: 15, lineHeight: 1.35, color: "var(--ink)",
+                      {/* Stack label + tag in a column so the tag wraps to its
+                          own line below — keeps the ADD-ON / ABC BONUS pill
+                          out of the diagonal ribbon's clip zone (top-right). */}
+                      <div style={{
+                        display: "flex", flexDirection: "column",
                         flex: "1 1 auto", minWidth: 0,
                       }}>
-                        {line.label}
+                        <span style={{
+                          fontFamily: "'Playfair Display', Georgia, serif",
+                          fontWeight: 500,
+                          fontSize: 15, lineHeight: 1.35, color: "var(--ink)",
+                        }}>
+                          {line.label}
+                        </span>
                         {line.tag && (
                           <span style={{
                             fontFamily: "Inter, sans-serif", fontWeight: 600, fontSize: 10,
                             letterSpacing: "0.18em", textTransform: "uppercase",
                             color: line.tag === "ABC BONUS" ? "var(--goldenrod-text)" : "var(--mute)",
-                            marginLeft: 6,
+                            marginTop: 1, lineHeight: 1.2,
                           }}>{line.tag}</span>
                         )}
-                      </span>
+                      </div>
                       {line.count > 1 && (
                         <span
                           aria-label={`admits ${line.count}`}
@@ -3076,26 +3095,36 @@ function TimelineNode({ w, delay, isLast, isFirstOfDay }) {
           <Bindu />
           {w.studio}<Bindu /><span style={{ color: "var(--mute)" }}>{w.floor}</span>
         </div>
-        {w.performerSlot && (
-          <div className="mt-1.5 inline-flex items-center gap-2"
-            style={{ borderLeft: "1px solid var(--vibrant)", paddingLeft: 10 }}>
-            <span style={{
-              fontFamily: "Inter, sans-serif", fontWeight: 500, fontSize: 10,
-              letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--vibrant-text)",
-            }}>You're on stage</span>
-            <span style={{
-              fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 500,
-              fontSize: 13, color: "var(--ink)", fontVariantNumeric: "tabular-nums",
-            }}>
-              {w.performerSlot} block
-              {w.performerWith && (
-                <em style={{ fontStyle: "italic", color: "var(--charcoal)", fontWeight: 400 }}>
-                  {" "}· with {w.performerWith}
-                </em>
-              )}
-            </span>
-          </div>
-        )}
+        {/* "You're on stage" rows — one per performance slot. Performers
+            with multiple slots (e.g. Nikta: 21:00 solo + 21:45 with
+            Bollybandits) get one row per block. Falls back to the legacy
+            single-slot path when performerSlots isn't passed. */}
+        {(() => {
+          const slots = w.performerSlots && w.performerSlots.length > 0
+            ? w.performerSlots
+            : (w.performerSlot ? [{ block: w.performerSlot, solo: !w.performerWith, with: w.performerWith }] : []);
+          if (slots.length === 0) return null;
+          return slots.map((slot, idx) => (
+            <div key={idx} className="mt-1.5 inline-flex items-center gap-2"
+              style={{ borderLeft: "1px solid var(--vibrant)", paddingLeft: 10, marginRight: idx < slots.length - 1 ? 12 : 0 }}>
+              <span style={{
+                fontFamily: "Inter, sans-serif", fontWeight: 500, fontSize: 10,
+                letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--vibrant-text)",
+              }}>You're on stage</span>
+              <span style={{
+                fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 500,
+                fontSize: 13, color: "var(--ink)", fontVariantNumeric: "tabular-nums",
+              }}>
+                {slot.block} block
+                {!slot.solo && slot.with && (
+                  <em style={{ fontStyle: "italic", color: "var(--charcoal)", fontWeight: 400 }}>
+                    {" "}· with {slot.with}
+                  </em>
+                )}
+              </span>
+            </div>
+          ));
+        })()}
         {/* OP guest count — for pass holders who bought extra OP tickets
             (e.g. Amy Symynck: Friday Pass + 2 extra OP guests). Renders only
             on the Opening Party item. Welcome desk admits the +N at the door. */}
