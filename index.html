@@ -312,6 +312,7 @@ const PASS_INCLUDES = {
   "Charter Pass":           [], // legacy alias (pre-SQL-section-16 rename)
   "Opening Party Only":  [], // empty — itinerary auto-includes OP via the includesOP check below
   "Gala Audience":       [], // empty — itinerary auto-includes GALA via the includesGala check below
+  "Tech Lab Only":       ["techLab"], // standalone Friday Tech Lab attendees (no festival pass)
 };
 
 // Gala showcase event — Saturday evening culminating performance.
@@ -398,6 +399,7 @@ const PASS_RIBBON = {
   "Charter Pass":           { color: "var(--charter)", label: "A la Carte" }, // legacy alias before SQL section 16 has run
   "Opening Party Only":  { color: "#7B3FA0", label: "Opening Party" }, // violet — distinct from workshop pass colors, party-coded
   "Gala Audience":       { color: "#C9982E", label: "Gala Audience" }, // deep gold — formal showcase evening
+  "Tech Lab Only":       { color: "#3D8B91", label: "Tech Lab"      }, // dusty teal — standalone Friday morning lab
 };
 
 
@@ -469,11 +471,23 @@ function computeItinerary(participant) {
   //   - Show for workshop pass holders even without gala (sales pitch /
   //     sold-out reminder, original behaviour)
   const isOPOnly = participant.pass === "Opening Party Only";
+  const isTechLabOnly = participant.pass === "Tech Lab Only";
   const galaTickets = participant.galaTickets || 0;
+  // Suppress the "separate ticket" Tech Lab callout for anyone who has
+  // already booked it — ABC dancers (auto-included), Tech Lab Only pass
+  // (the lab IS their pass), A la Carte holders who chose techLab, or
+  // pass holders who paid for it as an add-on.
+  const hasTechLab =
+    participant.isABC ||
+    isTechLabOnly ||
+    (participant.customWorkshops || []).includes('techLab') ||
+    addons.includes('techLab');
   return {
     items,
-    hasGalaCallout: !isGalaAudience && (galaTickets > 0 || !isOPOnly),
-    hasTechLabCallout: !participant.isABC && !isOPOnly && !isGalaAudience,
+    // Tech Lab Only attendees skip both callouts — they're here for one
+    // workshop, no need to upsell Gala or the Lab they've already booked.
+    hasGalaCallout: !isGalaAudience && !isTechLabOnly && (galaTickets > 0 || !isOPOnly),
+    hasTechLabCallout: !hasTechLab && !isOPOnly && !isGalaAudience && !isTechLabOnly,
     opPerformer: opSlot,
   };
 }
@@ -2734,6 +2748,8 @@ function PassStub({ participant, fromCode }) {
               addLine("openingParty", "Opening Party", { count: admitCount });
             } else if (pass === "Gala Audience") {
               addLine("gala", "Gala Showcase", { count: admitCount });
+            } else if (pass === "Tech Lab Only") {
+              addLine("techLab", "Tech & Tools Lab", { count: admitCount });
             } else if (pass === "A la Carte Pass" || pass === "Charter Pass") {
               // Backwards-compatible: accepts both labels in case section 16
               // of 003 (the rename) hasn't been applied yet.
@@ -2754,8 +2770,9 @@ function PassStub({ participant, fromCode }) {
               addLine("discoveryWorkshops", "Discovery workshops");
             }
 
-            // Add-ons (Silva, Swati, Anellia, Elodie) — listed as individual
-            // extras even on bundled passes since they're paid extras.
+            // Add-ons (Silva, Swati, Anellia, Elodie + 6 Full Fest holders
+            // who booked the Tech Lab on May 1) — listed as individual extras
+            // even on bundled passes since they're paid outside the bundle.
             addons.forEach(id => {
               addLine(id, SHORT_WORKSHOP_LABELS[id] || id, { tag: "ADD-ON" });
             });
